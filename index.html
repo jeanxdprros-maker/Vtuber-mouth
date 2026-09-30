@@ -3,305 +3,432 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>VTuber Mouth Link</title>
+<title>HONOR → PRISM • VTuber Mouth</title>
 <style>
-  *{box-sizing:border-box}
-  body{margin:0;background:#111;color:#eee;font-family:system-ui,-apple-system,sans-serif}
-  .wrap{max-width:760px;margin:auto;padding:18px}
-  h1{font-size:24px;margin:0 0 8px}
-  .muted{color:#aaa;font-size:14px}
-  .card{background:#1d1d1d;border-radius:16px;padding:16px;margin:14px 0}
-  button,input{font:inherit}
-  button{border:0;border-radius:12px;padding:12px 16px;background:#6c5ce7;color:white;font-weight:700}
-  button:disabled{opacity:.45}
-  input[type=text]{width:100%;padding:12px;border-radius:10px;border:1px solid #444;background:#111;color:#fff}
-  label{display:block;margin:10px 0 6px;font-weight:600}
-  video{width:100%;max-height:430px;object-fit:cover;border-radius:14px;background:#000;transform:scaleX(-1)}
-  .state{font-size:28px;font-weight:800;text-align:center;padding:12px;border-radius:12px;background:#282828;margin-top:12px}
-  .open{color:#7cff9b}.closed{color:#ff9a9a}
-  .avatar{min-height:260px;display:flex;align-items:center;justify-content:center;background:transparent}
-  .avatar img{max-width:90%;max-height:420px;object-fit:contain}
-  .hidden{display:none!important}
-  .copy{display:flex;gap:8px}.copy input{flex:1}
-  .small{font-size:12px;color:#999;line-height:1.45}
-  .ok{color:#7cff9b}.bad{color:#ff9a9a}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:#0b0b10;color:#f4f4f7;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{padding:16px}
+.wrap{max-width:760px;margin:auto}
+h1{font-size:24px;margin:0 0 4px}
+h2{font-size:18px;margin:0 0 10px}
+p,.muted{color:#a9abb7;font-size:14px}
+.card{background:#151620;border:1px solid #292b38;border-radius:16px;padding:16px;margin:12px 0}
+button,input{font:inherit}
+button{border:0;border-radius:12px;padding:12px 14px;background:#6d5dfc;color:#fff;font-weight:700}
+button.secondary{background:#292b38}
+button:disabled{opacity:.45}
+input[type=text],input[type=number]{width:100%;background:#0f1017;color:#fff;border:1px solid #343746;border-radius:10px;padding:11px}
+label{display:block;margin:10px 0 6px;font-size:13px;color:#c9cad3}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row>*{flex:1}
+.status{padding:10px 12px;border-radius:10px;background:#101117;border:1px solid #2b2d38}
+.ok{color:#61e6a8}.bad{color:#ff7c93}
+.meter{height:20px;background:#090a0f;border-radius:10px;overflow:hidden;border:1px solid #30323e}
+.bar{height:100%;width:0%;transition:width .05s linear;background:#7c6cff}
+.mouth{min-height:210px;display:flex;align-items:center;justify-content:center;background:transparent;position:relative}
+.mouth img{max-width:95%;max-height:210px;object-fit:contain}
+.hidden{display:none!important}
+.big{font-size:30px;font-weight:800}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.small{font-size:12px}
+hr{border:0;border-top:1px solid #292b38;margin:14px 0}
+#overlayRoot{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;pointer-events:none}
+#overlayRoot img{max-width:100vw;max-height:100vh;object-fit:contain}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>VTuber Mouth Link</h1>
-  <div class="muted">HONOR → detección de boca → POCO/PRISM</div>
+<div id="app" class="wrap">
+  <h1>HONOR → PRISM</h1>
+  <p>Micrófono solamente: el volumen abre/cierra la boca y el audio procesado se envía al overlay.</p>
 
-  <div class="card" id="home">
-    <p><b>Elige el dispositivo:</b></p>
-    <button onclick="show('sender')">HONOR · Cámara</button>
-    <button onclick="show('receiver')">POCO · PRISM</button>
-    <p class="small">La cámara nunca se envía. Solo se transmite el estado: ABIERTA o CERRADA.</p>
+  <div id="sender" class="card">
+    <h2>1. HONOR — emisor</h2>
+    <p>Abre esta página en el HONOR. Permite el micrófono y deja esta pestaña abierta.</p>
+    <button id="startBtn">🎙️ Activar micrófono</button>
+    <div class="status" style="margin-top:10px">Estado: <span id="sendStatus">esperando</span></div>
+    <div style="margin-top:10px">
+      <div class="small">Nivel de micrófono</div>
+      <div class="meter"><div id="meterBar" class="bar"></div></div>
+    </div>
+    <div style="margin-top:10px">
+      <div class="small">Boca</div>
+      <div id="mouthState" class="big">CERRADA</div>
+    </div>
+    <label for="threshold">Umbral de voz (más alto = ignora más ruido)</label>
+    <input id="threshold" type="range" min="0.005" max="0.15" step="0.001" value="0.035">
+    <div class="small muted">Actual: <span id="thresholdValue">0.035</span></div>
+    <label for="hold">Retención al dejar de hablar (ms)</label>
+    <input id="hold" type="number" min="0" max="1000" step="10" value="120">
+
+    <hr>
+    <div class="small">ID que debes usar en el overlay de PRISM:</div>
+    <div id="peerId" class="code" style="margin:8px 0">generando…</div>
+    <button id="copyId" class="secondary" disabled>Copiar ID</button>
+    <p class="small">El ID identifica este HONOR. No es una contraseña.</p>
   </div>
 
-  <section id="sender" class="hidden">
-    <div class="card">
-      <h2>HONOR · Cámara</h2>
-      <label>ID de conexión (se genera automáticamente)</label>
-      <div class="copy"><input id="peerId" readonly><button onclick="copyId()">Copiar</button></div>
-      <p id="senderStatus" class="small">Primero pulsa el botón para solicitar cámara y micrófono.</p>
-      <button id="startCameraBtn" onclick="requestHonorMedia()">📷🎙️ Activar cámara y micrófono</button>
-      <video id="video" autoplay muted playsinline></video>
-      <div id="mouthState" class="state closed">BOCA CERRADA</div>
-      <div id="micState" class="small">🎙️ Micrófono: preparando…</div>
+  <div id="receiver" class="card">
+    <h2>2. POCO / PRISM — overlay</h2>
+    <p>Esta parte se usa dentro de la URL del Web Overlay. También puedes probarla aquí primero.</p>
+    <label for="senderId">ID del HONOR</label>
+    <input id="senderId" type="text" placeholder="Pega aquí el ID del HONOR">
+    <label for="openUrl">PNG boca abierta</label>
+    <input id="openUrl" type="text" value="open.png">
+    <label for="closedUrl">PNG boca cerrada</label>
+    <input id="closedUrl" type="text" value="closed.png">
+    <div class="row" style="margin-top:10px">
+      <button id="connectBtn">Conectar</button>
+      <button id="copyOverlay" class="secondary">Copiar URL del overlay</button>
     </div>
-    <div class="card">
-      <h3>Tus dos PNG</h3>
-      <label>PNG boca cerrada</label>
-      <input id="closedFile" type="file" accept="image/png,image/*">
-      <label>PNG boca abierta</label>
-      <input id="openFile" type="file" accept="image/png,image/*">
-      <p class="small">Se envían al POCO al conectar. No se necesita subirlos a internet.</p>
+    <div class="status" style="margin-top:10px">Estado: <span id="recvStatus">esperando</span></div>
+    <div id="mouthPreview" class="mouth">
+      <img id="mouthImg" alt="VTuber">
     </div>
-    <div class="card small">
-      <b>Importante:</b> permite el acceso a la cámara cuando el navegador del HONOR lo pida.
-    </div>
-  </section>
-
-  <section id="receiver" class="hidden">
-    <div class="card">
-      <h2>POCO · PRISM</h2>
-      <label>ID del HONOR</label>
-      <input id="remoteId" placeholder="Pega aquí el ID que aparece en el HONOR">
-      <br><br>
-      <button onclick="connectReceiver()">Conectar</button>
-      <p id="receiverStatus" class="small">Sin conexión.</p>
-    </div>
-    <div class="avatar" id="avatar">
-      <div class="muted">Esperando al HONOR…</div>
-    </div>
-  </section>
+    <audio id="remoteAudio" autoplay playsinline></audio>
+  </div>
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
-let peer=null, conn=null, mode=null;
-let closedImg=null, openImg=null, lastState='closed';
-let detector=null, stream=null, micStream=null, timer=null;
+(() => {
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const isOverlay = params.get('mode') === 'overlay';
+  const app = $('app');
 
-function show(m){
-  mode=m;
-  document.getElementById('home').classList.add('hidden');
-  document.getElementById(m).classList.remove('hidden');
-  if(m==='sender') startSender();
-}
+  function setStatus(el, text, good=false) {
+    el.textContent = text;
+    el.className = good ? 'ok' : '';
+  }
 
-async function startSender(){
-  const status=document.getElementById('senderStatus');
-  status.textContent='Creando conexión…';
-  peer=new Peer(undefined,{debug:0});
-  peer.on('open',id=>{
-    document.getElementById('peerId').value=id;
-    status.innerHTML='<span class="ok">Listo.</span> Pega este ID en la página del POCO.';
-  });
-  peer.on('connection',c=>{
-    conn=c;
-    status.innerHTML='<span class="ok">POCO conectado.</span>';
-    conn.on('open',()=>{
-      sendImages();
-      // Le avisamos al HONOR de que el reproductor de audio del POCO está listo.
-      conn.send({type:'audio-ready'});
+  /* =========================
+     MODO OVERLAY — PRISM
+     ========================= */
+  if (isOverlay) {
+    document.body.style.background = 'transparent';
+    app.classList.add('hidden');
+
+    const root = document.createElement('div');
+    root.id = 'overlayRoot';
+    document.body.appendChild(root);
+
+    const img = document.createElement('img');
+    root.appendChild(img);
+
+    const senderId = params.get('sender') || '';
+    const openUrl = params.get('open') || 'open.png';
+    const closedUrl = params.get('closed') || 'closed.png';
+    img.src = closedUrl;
+
+    const peer = new Peer();
+
+    function setMouth(open) {
+      img.src = open ? openUrl : closedUrl;
+    }
+
+    peer.on('open', () => {
+      if (!senderId) return;
+
+      const conn = peer.connect(senderId, {reliable:true});
+
+      conn.on('open', () => {
+        conn.send({type:'hello'});
+      });
+
+      conn.on('data', data => {
+        if (data === 'OPEN' || data === 1 || data?.mouth === 'open') setMouth(true);
+        if (data === 'CLOSED' || data === 0 || data?.mouth === 'closed') setMouth(false);
+      });
     });
-  });
 
-  // El POCO puede iniciar una llamada de audio hacia el HONOR.
-  peer.on('call',call=>{});
-}
+    peer.on('call', call => {
+      // El HONOR manda el micrófono procesado por WebRTC.
+      call.answer();
 
-async function requestHonorMedia(){
-  const status=document.getElementById('senderStatus');
-  const btn=document.getElementById('startCameraBtn');
+      call.on('stream', stream => {
+        const audio = document.createElement('audio');
+        audio.autoplay = true;
+        audio.playsInline = true;
+        audio.srcObject = stream;
+        audio.volume = 1;
+        document.body.appendChild(audio);
+        const p = audio.play();
+        if (p && p.catch) p.catch(()=>{});
+      });
+    });
 
-  if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    status.innerHTML='<span class="bad">⚠️ Este archivo está abierto como archivo local (file://) o en una conexión no segura. Android bloquea cámara/micrófono así. Debes abrirlo desde una URL HTTPS.</span>';
     return;
   }
 
-  btn.disabled=true;
-  status.textContent='Solicitando permisos de cámara y micrófono…';
+  /* =========================
+     MODO NORMAL — HONOR / PRUEBA
+     ========================= */
+  let peer = null;
+  let micStream = null;
+  let processedStream = null;
+  let audioCtx = null;
+  let source = null;
+  let analyser = null;
+  let gate = null;
+  let dest = null;
 
-  try{
-    stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},
-      audio:false
-    });
-    const v=document.getElementById('video');
-    v.srcObject=stream;
+  let speaking = false;
+  let lastOpen = 0;
+  let lastSent = null;
+  let lastSendTime = 0;
 
-    // Capturamos el micrófono del HONOR por separado.
-    micStream=await navigator.mediaDevices.getUserMedia({
-      audio:{
-        echoCancellation:true,
-        noiseSuppression:true,
-        autoGainControl:true
-      },
-      video:false
-    });
-    document.getElementById('micState').innerHTML='<span class="ok">🎙️ Micrófono del HONOR activo</span>';
+  let threshold = parseFloat($('threshold').value);
+  let holdMs = parseInt($('hold').value,10);
 
-    await initFaceDetector();
-    status.innerHTML='<span class="ok">Cámara y micrófono activos. Ahora puedes conectar el POCO.</span>';
-    btn.textContent='✅ Cámara y micrófono activos';
-  }catch(e){
-    btn.disabled=false;
-    const mic=document.getElementById('micState');
-    if(!micStream) mic.innerHTML='<span class="bad">🎙️ No se pudo activar el micrófono: '+escapeHtml(e.message)+'</span>';
-    status.innerHTML='<span class="bad">Permiso rechazado o error: '+escapeHtml(e.message)+'</span>';
-  }
-}
-
-async function initFaceDetector(){
-  // MediaPipe Face Landmarker is loaded dynamically.
-  const mod=document.createElement('script');
-  mod.type='module';
-  mod.textContent=`
-    import {FaceLandmarker, FilesetResolver} from
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs";
-    window.__makeLandmarker=async()=>{
-      const vision=await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
-      );
-      return await FaceLandmarker.createFromOptions(vision,{
-        baseOptions:{
-          modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-          delegate:"GPU"
-        },
-        runningMode:"VIDEO",
-        numFaces:1,
-        outputFaceBlendshapes:true
-      });
-    };
-  `;
-  document.head.appendChild(mod);
-  let tries=0;
-  while(!window.__makeLandmarker && tries++<100) await new Promise(r=>setTimeout(r,100));
-  if(!window.__makeLandmarker) throw new Error('No se pudo cargar el detector.');
-  detector=await window.__makeLandmarker();
-  requestAnimationFrame(loop);
-}
-
-function loop(){
-  const v=document.getElementById('video');
-  if(detector && v.readyState>=2){
-    const res=detector.detectForVideo(v,performance.now());
-    let state='closed';
-    if(res.faceBlendshapes?.[0]?.categories){
-      const cats=res.faceBlendshapes[0].categories;
-      const get=n=>(cats.find(x=>x.categoryName===n)?.score)||0;
-      // Jaw open is the principal signal. A low threshold makes simple PNG
-      // mouth switching responsive while avoiding constant flicker.
-      const jaw=get('jawOpen');
-      state=jaw>0.28?'open':'closed';
-    }
-    if(state!==lastState){
-      lastState=state;
-      const el=document.getElementById('mouthState');
-      el.textContent=state==='open'?'BOCA ABIERTA':'BOCA CERRADA';
-      el.className='state '+state;
-      if(conn?.open) conn.send({type:'state',state});
-    }
-  }
-  requestAnimationFrame(loop);
-}
-
-function startAudioCall(){
-  if(!micStream || !conn?.peer || !peer) return;
-  try{
-    const call=peer.call(conn.peer,micStream,{
-      metadata:{type:'vtuber-honor-mic'}
-    });
-    const mic=document.getElementById('micState');
-    mic.innerHTML='<span class="ok">🎙️ Enviando micrófono al POCO…</span>';
-    call.on('error',e=>{
-      mic.innerHTML='<span class="bad">🎙️ Error de audio: '+escapeHtml(e.message)+'</span>';
-    });
-  }catch(e){}
-}
-
-function readFile(file){
-  return new Promise((resolve,reject)=>{
-    if(!file){resolve(null);return}
-    const r=new FileReader();
-    r.onload=()=>resolve(r.result);
-    r.onerror=reject;
-    r.readAsDataURL(file);
+  $('threshold').addEventListener('input', e => {
+    threshold = parseFloat(e.target.value);
+    $('thresholdValue').textContent = threshold.toFixed(3);
   });
-}
-async function sendImages(){
-  closedImg=await readFile(document.getElementById('closedFile').files[0]);
-  openImg=await readFile(document.getElementById('openFile').files[0]);
-  if(conn?.open) conn.send({type:'images',closed:closedImg,open:openImg});
-  if(conn?.open) conn.send({type:'state',state:lastState});
-}
-document.getElementById('closedFile').addEventListener('change',sendImages);
-document.getElementById('openFile').addEventListener('change',sendImages);
 
-function connectReceiver(){
-  const id=document.getElementById('remoteId').value.trim();
-  const status=document.getElementById('receiverStatus');
-  if(!id){status.innerHTML='<span class="bad">Pega el ID del HONOR.</span>';return}
-  peer=new Peer(undefined,{debug:0});
-  peer.on('open',()=>{});
-  peer.on('error',e=>status.innerHTML='<span class="bad">'+escapeHtml(e.message)+'</span>');
-  peer.on('call',call=>{
-    call.answer();
-    call.on('stream',remoteStream=>{
-      let audio=document.getElementById('honorAudio');
-      if(!audio){
-        audio=document.createElement('audio');
-        audio.id='honorAudio';
-        audio.autoplay=true;
-        audio.setAttribute('playsinline','');
-        audio.style.display='none';
-        document.body.appendChild(audio);
+  $('hold').addEventListener('input', e => {
+    holdMs = Math.max(0, parseInt(e.target.value || '0',10));
+  });
+
+  function broadcastMouth(force=false) {
+    const state = speaking ? 'open' : 'closed';
+    const now = performance.now();
+
+    // No necesitamos enviar 60 mensajes por segundo.
+    if (!force && state === lastSent && now - lastSendTime < 100) return;
+
+    lastSent = state;
+    lastSendTime = now;
+
+    if (!peer || !peer.connections) return;
+
+    for (const list of Object.values(peer.connections)) {
+      for (const c of list) {
+        if (c.open) {
+          try {
+            c.send({type:'mouth', mouth:state});
+          } catch(e) {}
+        }
       }
-      audio.srcObject=remoteStream;
-      audio.muted=false;
-      audio.volume=1;
-      audio.play().catch(()=>{
-        status.innerHTML='<span class="bad">Toca la pantalla del POCO y vuelve a conectar para activar el audio.</span>';
-      });
-      status.innerHTML='<span class="ok">Conectado al HONOR · 🎙️ audio activo</span>';
+    }
+  }
+
+  function callOverlay(remotePeerId) {
+    if (!processedStream || !peer) return;
+
+    try {
+      const call = peer.call(remotePeerId, processedStream);
+      call.on('error', e => console.log('Audio call error', e));
+    } catch(e) {
+      console.log(e);
+    }
+  }
+
+  peer = new Peer(undefined, {debug:1});
+
+  peer.on('open', id => {
+    $('peerId').textContent = id;
+    $('copyId').disabled = false;
+    setStatus($('sendStatus'), 'conectado / listo', true);
+  });
+
+  peer.on('connection', conn => {
+    conn.on('open', () => {
+      broadcastMouth(true);
+      if (processedStream) callOverlay(conn.peer);
+    });
+
+    conn.on('data', data => {
+      if (data?.type === 'hello' && processedStream) {
+        callOverlay(conn.peer);
+      }
     });
   });
-  conn=peer.connect(id,{reliable:true});
-  conn.on('open',()=>status.innerHTML='<span class="ok">Conectado al HONOR.</span>');
-  conn.on('data',msg=>{
-    if(msg.type==='images'){
-      closedImg=msg.closed||closedImg;
-      openImg=msg.open||openImg;
-      renderAvatar(lastState);
-    }
-    if(msg.type==='state'){
-      lastState=msg.state;
-      renderAvatar(lastState);
-    }
-    if(msg.type==='audio-ready'){
-      startAudioCall();
+
+  peer.on('error', e => {
+    setStatus($('sendStatus'), 'error: ' + (e.type || e.message || e), false);
+  });
+
+  $('startBtn').addEventListener('click', async () => {
+    try {
+      $('startBtn').disabled = true;
+      setStatus($('sendStatus'), 'solicitando permiso…');
+
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1
+        },
+        video: false
+      });
+
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      await audioCtx.resume();
+
+      source = audioCtx.createMediaStreamSource(micStream);
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.15;
+
+      // Gate software: debajo del umbral no manda audio.
+      gate = audioCtx.createGain();
+      gate.gain.value = 0;
+
+      dest = audioCtx.createMediaStreamDestination();
+
+      source.connect(analyser);
+      source.connect(gate);
+      gate.connect(dest);
+
+      processedStream = dest.stream;
+
+      // Si el overlay ya estaba conectado, le mandamos el audio.
+      if (peer.connections) {
+        for (const list of Object.values(peer.connections)) {
+          for (const c of list) {
+            if (c.open) callOverlay(c.peer);
+          }
+        }
+      }
+
+      setStatus($('sendStatus'), 'micrófono activo', true);
+      $('startBtn').textContent = '🎙️ Micrófono activo';
+
+      const data = new Uint8Array(analyser.fftSize);
+
+      const tick = () => {
+        analyser.getByteTimeDomainData(data);
+
+        let sum = 0;
+        for (let i=0; i<data.length; i++) {
+          const v = (data[i]-128)/128;
+          sum += v*v;
+        }
+
+        const rms = Math.sqrt(sum/data.length);
+        const pct = Math.min(100, rms * 500);
+        $('meterBar').style.width = pct + '%';
+
+        const now = performance.now();
+
+        if (rms >= threshold) {
+          speaking = true;
+          lastOpen = now;
+        } else if (now - lastOpen > holdMs) {
+          speaking = false;
+        }
+
+        const target = speaking ? 1 : 0;
+
+        // Ataque/release suave para evitar clicks.
+        gate.gain.setTargetAtTime(
+          target,
+          audioCtx.currentTime,
+          speaking ? 0.015 : 0.035
+        );
+
+        $('mouthState').textContent = speaking ? 'ABIERTA' : 'CERRADA';
+        $('mouthState').className = 'big ' + (speaking ? 'ok' : '');
+
+        broadcastMouth();
+
+        requestAnimationFrame(tick);
+      };
+
+      tick();
+
+    } catch (e) {
+      console.error(e);
+      $('startBtn').disabled = false;
+      setStatus(
+        $('sendStatus'),
+        'permiso/error: ' + (e.message || e),
+        false
+      );
     }
   });
-  conn.on('close',()=>status.innerHTML='<span class="bad">Conexión cerrada.</span>');
-}
 
-function renderAvatar(state){
-  const box=document.getElementById('avatar');
-  const src=state==='open'?openImg:closedImg;
-  if(!src){box.innerHTML='<div class="muted">Esperando los PNG del HONOR…</div>';return}
-  box.innerHTML='<img alt="VTuber" src="'+src+'">';
-}
-async function copyId(){
-  const v=document.getElementById('peerId').value;
-  try{await navigator.clipboard.writeText(v);alert('ID copiado');}catch(e){}
-}
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+  $('copyId').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText($('peerId').textContent);
+    } catch(e) {}
+  });
+
+  function currentOverlayUrl() {
+    const base = location.origin + location.pathname;
+    const sid = encodeURIComponent($('senderId').value.trim());
+    const open = encodeURIComponent($('openUrl').value.trim() || 'open.png');
+    const closed = encodeURIComponent($('closedUrl').value.trim() || 'closed.png');
+
+    return base +
+      '?mode=overlay' +
+      '&sender=' + sid +
+      '&open=' + open +
+      '&closed=' + closed;
+  }
+
+  $('copyOverlay').addEventListener('click', async () => {
+    const url = currentOverlayUrl();
+
+    try {
+      await navigator.clipboard.writeText(url);
+      $('copyOverlay').textContent = '✓ URL copiada';
+      setTimeout(
+        () => $('copyOverlay').textContent='Copiar URL del overlay',
+        1500
+      );
+    } catch(e) {
+      prompt('Copia esta URL:', url);
+    }
+  });
+
+  $('connectBtn').addEventListener('click', () => {
+    const sid = $('senderId').value.trim();
+
+    if (!sid) {
+      setStatus($('recvStatus'), 'falta el ID del HONOR');
+      return;
+    }
+
+    const rpeer = new Peer();
+
+    setStatus($('recvStatus'), 'conectando…');
+
+    rpeer.on('open', () => {
+      const conn = rpeer.connect(sid, {reliable:true});
+
+      conn.on('open', () => {
+        setStatus($('recvStatus'), 'conectado al HONOR', true);
+      });
+
+      conn.on('data', data => {
+        if (data?.mouth === 'open') {
+          $('mouthImg').src = $('openUrl').value.trim();
+        } else if (data?.mouth === 'closed') {
+          $('mouthImg').src = $('closedUrl').value.trim();
+        }
+      });
+    });
+
+    rpeer.on('call', call => {
+      call.answer();
+
+      call.on('stream', stream => {
+        $('remoteAudio').srcObject = stream;
+        $('remoteAudio').play().catch(()=>{});
+      });
+    });
+
+    rpeer.on('error', e => {
+      setStatus(
+        $('recvStatus'),
+        'error: ' + (e.type || e.message || e)
+      );
+    });
+  });
+})();
 </script>
 </body>
 </html>
