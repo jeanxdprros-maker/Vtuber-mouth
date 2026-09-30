@@ -7,428 +7,184 @@
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%;background:#0b0b10;color:#f4f4f7;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-body{padding:16px}
-.wrap{max-width:760px;margin:auto}
-h1{font-size:24px;margin:0 0 4px}
-h2{font-size:18px;margin:0 0 10px}
-p,.muted{color:#a9abb7;font-size:14px}
-.card{background:#151620;border:1px solid #292b38;border-radius:16px;padding:16px;margin:12px 0}
-button,input{font:inherit}
-button{border:0;border-radius:12px;padding:12px 14px;background:#6d5dfc;color:#fff;font-weight:700}
-button.secondary{background:#292b38}
-button:disabled{opacity:.45}
-input[type=text],input[type=number]{width:100%;background:#0f1017;color:#fff;border:1px solid #343746;border-radius:10px;padding:11px}
-label{display:block;margin:10px 0 6px;font-size:13px;color:#c9cad3}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.row>*{flex:1}
-.status{padding:10px 12px;border-radius:10px;background:#101117;border:1px solid #2b2d38}
-.ok{color:#61e6a8}.bad{color:#ff7c93}
-.meter{height:20px;background:#090a0f;border-radius:10px;overflow:hidden;border:1px solid #30323e}
-.bar{height:100%;width:0%;transition:width .05s linear;background:#7c6cff}
-.mouth{min-height:210px;display:flex;align-items:center;justify-content:center;background:transparent;position:relative}
-.mouth img{max-width:95%;max-height:210px;object-fit:contain}
-.hidden{display:none!important}
-.big{font-size:30px;font-weight:800}
-.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
-.small{font-size:12px}
-hr{border:0;border-top:1px solid #292b38;margin:14px 0}
-#overlayRoot{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;pointer-events:none}
-#overlayRoot img{max-width:100vw;max-height:100vh;object-fit:contain}
+body{padding:16px}.wrap{max-width:760px;margin:auto}h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:0 0 10px}p,.muted{color:#a9abb7;font-size:14px}.card{background:#151620;border:1px solid #292b38;border-radius:16px;padding:16px;margin:12px 0}button,input,select{font:inherit}button{border:0;border-radius:12px;padding:12px 14px;background:#6d5dfc;color:#fff;font-weight:700}button.secondary{background:#292b38}button:disabled{opacity:.45}input[type=text],input[type=number],select{width:100%;background:#0f1017;color:#fff;border:1px solid #343746;border-radius:10px;padding:11px}input[type=range]{width:100%}label{display:block;margin:10px 0 6px;font-size:13px;color:#c9cad3}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.status{padding:10px 12px;border-radius:10px;background:#101117;border:1px solid #2b2d38}.ok{color:#61e6a8}.bad{color:#ff7c93}.meter{height:20px;background:#090a0f;border-radius:10px;overflow:hidden;border:1px solid #30323e}.bar{height:100%;width:0%;transition:width .05s linear;background:#7c6cff}.mouth{min-height:210px;display:flex;align-items:center;justify-content:center;background:transparent;position:relative}.mouth img{max-width:95%;max-height:210px;object-fit:contain}.hidden{display:none!important}.big{font-size:30px;font-weight:800}.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}.small{font-size:12px}hr{border:0;border-top:1px solid #292b38;margin:14px 0}
+html.overlay-mode,html.overlay-mode body{background:transparent!important;background-color:transparent!important}html.overlay-mode body{padding:0!important;overflow:hidden!important}#overlayRoot{position:fixed;inset:0;width:100vw;height:100vh;display:flex;align-items:flex-end;justify-content:center;pointer-events:none;background:transparent!important;overflow:hidden}#overlayRoot img{display:block;max-width:100vw;max-height:100vh;width:auto;height:auto;object-fit:contain;background:transparent!important;border:0!important;box-shadow:none!important}
 </style>
 </head>
 <body>
 <div id="app" class="wrap">
-  <h1>HONOR → PRISM</h1>
-  <p>Micrófono solamente: el volumen abre/cierra la boca y el audio procesado se envía al overlay.</p>
-
-  <div id="sender" class="card">
-    <h2>1. HONOR — emisor</h2>
-    <p>Abre esta página en el HONOR. Permite el micrófono y deja esta pestaña abierta.</p>
-    <button id="startBtn">🎙️ Activar micrófono</button>
-    <div class="status" style="margin-top:10px">Estado: <span id="sendStatus">esperando</span></div>
-    <div style="margin-top:10px">
-      <div class="small">Nivel de micrófono</div>
-      <div class="meter"><div id="meterBar" class="bar"></div></div>
-    </div>
-    <div style="margin-top:10px">
-      <div class="small">Boca</div>
-      <div id="mouthState" class="big">CERRADA</div>
-    </div>
-    <label for="threshold">Umbral de voz (más alto = ignora más ruido)</label>
-    <input id="threshold" type="range" min="0.005" max="0.15" step="0.001" value="0.035">
-    <div class="small muted">Actual: <span id="thresholdValue">0.035</span></div>
-    <label for="hold">Retención al dejar de hablar (ms)</label>
-    <input id="hold" type="number" min="0" max="1000" step="10" value="120">
-
-    <hr>
-    <div class="small">ID que debes usar en el overlay de PRISM:</div>
-    <div id="peerId" class="code" style="margin:8px 0">generando…</div>
-    <button id="copyId" class="secondary" disabled>Copiar ID</button>
-    <p class="small">El ID identifica este HONOR. No es una contraseña.</p>
-  </div>
-
-  <div id="receiver" class="card">
-    <h2>2. POCO / PRISM — overlay</h2>
-    <p>Esta parte se usa dentro de la URL del Web Overlay. También puedes probarla aquí primero.</p>
-    <label for="senderId">ID del HONOR</label>
-    <input id="senderId" type="text" placeholder="Pega aquí el ID del HONOR">
-    <label for="openUrl">PNG boca abierta</label>
-    <input id="openUrl" type="text" value="open.png">
-    <label for="closedUrl">PNG boca cerrada</label>
-    <input id="closedUrl" type="text" value="closed.png">
-    <div class="row" style="margin-top:10px">
-      <button id="connectBtn">Conectar</button>
-      <button id="copyOverlay" class="secondary">Copiar URL del overlay</button>
-    </div>
-    <div class="status" style="margin-top:10px">Estado: <span id="recvStatus">esperando</span></div>
-    <div id="mouthPreview" class="mouth">
-      <img id="mouthImg" alt="VTuber">
-    </div>
-    <audio id="remoteAudio" autoplay playsinline></audio>
-  </div>
+<h1>HONOR → PRISM</h1>
+<p>Micrófono del HONOR → limpieza de ruido → modificador de voz → PRISM. El micrófono del POCO puede permanecer silenciado.</p>
+<div id="sender" class="card">
+<h2>1. HONOR — emisor</h2>
+<p>Este teléfono usa siempre el mismo ID fijo de PeerJS. No tienes que copiar un ID aleatorio.</p>
+<div class="status">ID fijo: <span id="peerId" class="code">704004476</span></div>
+<button id="startBtn" style="margin-top:10px">🎙️ Activar micrófono</button>
+<div class="status" style="margin-top:10px">Estado: <span id="sendStatus">esperando</span></div>
+<div style="margin-top:10px"><div class="small">Nivel de micrófono</div><div class="meter"><div id="meterBar" class="bar"></div></div></div>
+<div style="margin-top:10px"><div class="small">Boca</div><div id="mouthState" class="big">CERRADA</div></div>
+<hr>
+<h2>Reducción de ruido</h2>
+<label for="threshold">Sensibilidad de voz (más alto = bloquea más ruido)</label>
+<input id="threshold" type="range" min="0.005" max="0.15" step="0.001" value="0.035"><div class="small muted">Actual: <span id="thresholdValue">0.035</span></div>
+<label for="hold">Retención de boca al dejar de hablar (ms)</label>
+<input id="hold" type="number" min="0" max="1000" step="10" value="120">
+<label for="calibration">Calibración automática del ruido</label>
+<div class="row"><button id="calibrateBtn" class="secondary" disabled>🔇 Calibrar 3 s</button><button id="resetThreshold" class="secondary">Restablecer</button></div>
+<div class="small muted" id="noiseInfo">Primero activa el micrófono. Durante la calibración no hables.</div>
+<hr>
+<h2>🎭 Modificador de voz</h2>
+<label for="voiceEffect">Efecto</label>
+<select id="voiceEffect"><option value="normal">Normal</option><option value="deep">Grave</option><option value="high">Aguda</option><option value="robot">Robot</option><option value="monster">Monstruo</option><option value="radio">Radio</option><option value="megaphone">Megáfono</option><option value="distortion">Distorsionada</option><option value="echo">Eco</option><option value="space">Espacial</option></select>
+<label for="effectAmount">Intensidad</label><input id="effectAmount" type="range" min="0" max="1" step="0.01" value="0.65"><div class="small muted">Intensidad: <span id="effectAmountValue">65%</span></div>
+<label for="voiceVolume">Volumen de voz</label><input id="voiceVolume" type="range" min="0.2" max="1.4" step="0.01" value="1"><div class="small muted">Volumen: <span id="voiceVolumeValue">100%</span></div>
+<div class="small muted">Los modos grave/aguda son efectos de Web Audio; no son un pitch-shifter profesional.</div>
+<hr>
+<div class="small">URL del overlay para PRISM:</div><div class="small muted">El overlay usa automáticamente el ID fijo <b>704004476</b>.</div><button id="copyOverlay" style="margin-top:10px">📋 Copiar URL del overlay</button>
 </div>
-
+<div class="card"><h2>Prueba local</h2><p>Sirve para comprobar la boca y el audio antes de pegar la URL en PRISM.</p><div class="status">Estado: <span id="localStatus">esperando</span></div><div id="mouthPreview" class="mouth"><img id="mouthImg" alt="VTuber" src="closed.png"></div><audio id="remoteAudio" autoplay playsinline></audio></div>
+</div>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
-(() => {
-  const $ = id => document.getElementById(id);
-  const params = new URLSearchParams(location.search);
-  const isOverlay = params.get('mode') === 'overlay';
-  const app = $('app');
-
-  function setStatus(el, text, good=false) {
-    el.textContent = text;
-    el.className = good ? 'ok' : '';
-  }
-
-  /* =========================
-     MODO OVERLAY — PRISM
-     ========================= */
-  if (isOverlay) {
-    document.body.style.background = 'transparent';
-    app.classList.add('hidden');
-
-    const root = document.createElement('div');
-    root.id = 'overlayRoot';
-    document.body.appendChild(root);
-
-    const img = document.createElement('img');
-    root.appendChild(img);
-
-    const senderId = params.get('sender') || '';
-    const openUrl = params.get('open') || 'open.png';
-    const closedUrl = params.get('closed') || 'closed.png';
-    img.src = closedUrl;
-
-    const peer = new Peer();
-
-    function setMouth(open) {
-      img.src = open ? openUrl : closedUrl;
-    }
-
-    peer.on('open', () => {
-      if (!senderId) return;
-
-      const conn = peer.connect(senderId, {reliable:true});
-
-      conn.on('open', () => {
-        conn.send({type:'hello'});
-      });
-
-      conn.on('data', data => {
-        if (data === 'OPEN' || data === 1 || data?.mouth === 'open') setMouth(true);
-        if (data === 'CLOSED' || data === 0 || data?.mouth === 'closed') setMouth(false);
-      });
-    });
-
-    peer.on('call', call => {
-      // El HONOR manda el micrófono procesado por WebRTC.
-      call.answer();
-
-      call.on('stream', stream => {
-        const audio = document.createElement('audio');
-        audio.autoplay = true;
-        audio.playsInline = true;
-        audio.srcObject = stream;
-        audio.volume = 1;
-        document.body.appendChild(audio);
-        const p = audio.play();
-        if (p && p.catch) p.catch(()=>{});
-      });
-    });
-
-    return;
-  }
-
-  /* =========================
-     MODO NORMAL — HONOR / PRUEBA
-     ========================= */
-  let peer = null;
-  let micStream = null;
-  let processedStream = null;
-  let audioCtx = null;
-  let source = null;
-  let analyser = null;
-  let gate = null;
-  let dest = null;
-
-  let speaking = false;
-  let lastOpen = 0;
-  let lastSent = null;
-  let lastSendTime = 0;
-
-  let threshold = parseFloat($('threshold').value);
-  let holdMs = parseInt($('hold').value,10);
-
-  $('threshold').addEventListener('input', e => {
-    threshold = parseFloat(e.target.value);
-    $('thresholdValue').textContent = threshold.toFixed(3);
-  });
-
-  $('hold').addEventListener('input', e => {
-    holdMs = Math.max(0, parseInt(e.target.value || '0',10));
-  });
-
-  function broadcastMouth(force=false) {
-    const state = speaking ? 'open' : 'closed';
-    const now = performance.now();
-
-    // No necesitamos enviar 60 mensajes por segundo.
-    if (!force && state === lastSent && now - lastSendTime < 100) return;
-
-    lastSent = state;
-    lastSendTime = now;
-
-    if (!peer || !peer.connections) return;
-
-    for (const list of Object.values(peer.connections)) {
-      for (const c of list) {
-        if (c.open) {
-          try {
-            c.send({type:'mouth', mouth:state});
-          } catch(e) {}
-        }
-      }
-    }
-  }
-
-  function callOverlay(remotePeerId) {
-    if (!processedStream || !peer) return;
-
-    try {
-      const call = peer.call(remotePeerId, processedStream);
-      call.on('error', e => console.log('Audio call error', e));
-    } catch(e) {
-      console.log(e);
-    }
-  }
-
-  peer = new Peer(undefined, {debug:1});
-
-  peer.on('open', id => {
-    $('peerId').textContent = id;
-    $('copyId').disabled = false;
-    setStatus($('sendStatus'), 'conectado / listo', true);
-  });
-
-  peer.on('connection', conn => {
-    conn.on('open', () => {
-      broadcastMouth(true);
-      if (processedStream) callOverlay(conn.peer);
-    });
-
-    conn.on('data', data => {
-      if (data?.type === 'hello' && processedStream) {
-        callOverlay(conn.peer);
-      }
-    });
-  });
-
-  peer.on('error', e => {
-    setStatus($('sendStatus'), 'error: ' + (e.type || e.message || e), false);
-  });
-
-  $('startBtn').addEventListener('click', async () => {
-    try {
-      $('startBtn').disabled = true;
-      setStatus($('sendStatus'), 'solicitando permiso…');
-
-      micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1
-        },
-        video: false
-      });
-
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      await audioCtx.resume();
-
-      source = audioCtx.createMediaStreamSource(micStream);
-
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.15;
-
-      // Gate software: debajo del umbral no manda audio.
-      gate = audioCtx.createGain();
-      gate.gain.value = 0;
-
-      dest = audioCtx.createMediaStreamDestination();
-
-      source.connect(analyser);
-      source.connect(gate);
-      gate.connect(dest);
-
-      processedStream = dest.stream;
-
-      // Si el overlay ya estaba conectado, le mandamos el audio.
-      if (peer.connections) {
-        for (const list of Object.values(peer.connections)) {
-          for (const c of list) {
-            if (c.open) callOverlay(c.peer);
-          }
-        }
-      }
-
-      setStatus($('sendStatus'), 'micrófono activo', true);
-      $('startBtn').textContent = '🎙️ Micrófono activo';
-
-      const data = new Uint8Array(analyser.fftSize);
-
-      const tick = () => {
-        analyser.getByteTimeDomainData(data);
-
-        let sum = 0;
-        for (let i=0; i<data.length; i++) {
-          const v = (data[i]-128)/128;
-          sum += v*v;
-        }
-
-        const rms = Math.sqrt(sum/data.length);
-        const pct = Math.min(100, rms * 500);
-        $('meterBar').style.width = pct + '%';
-
-        const now = performance.now();
-
-        if (rms >= threshold) {
-          speaking = true;
-          lastOpen = now;
-        } else if (now - lastOpen > holdMs) {
-          speaking = false;
-        }
-
-        const target = speaking ? 1 : 0;
-
-        // Ataque/release suave para evitar clicks.
-        gate.gain.setTargetAtTime(
-          target,
-          audioCtx.currentTime,
-          speaking ? 0.015 : 0.035
-        );
-
-        $('mouthState').textContent = speaking ? 'ABIERTA' : 'CERRADA';
-        $('mouthState').className = 'big ' + (speaking ? 'ok' : '');
-
-        broadcastMouth();
-
-        requestAnimationFrame(tick);
-      };
-
-      tick();
-
-    } catch (e) {
-      console.error(e);
-      $('startBtn').disabled = false;
-      setStatus(
-        $('sendStatus'),
-        'permiso/error: ' + (e.message || e),
-        false
-      );
-    }
-  });
-
-  $('copyId').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText($('peerId').textContent);
-    } catch(e) {}
-  });
-
-  function currentOverlayUrl() {
-    const base = location.origin + location.pathname;
-    const sid = encodeURIComponent($('senderId').value.trim());
-    const open = encodeURIComponent($('openUrl').value.trim() || 'open.png');
-    const closed = encodeURIComponent($('closedUrl').value.trim() || 'closed.png');
-
-    return base +
-      '?mode=overlay' +
-      '&sender=' + sid +
-      '&open=' + open +
-      '&closed=' + closed;
-  }
-
-  $('copyOverlay').addEventListener('click', async () => {
-    const url = currentOverlayUrl();
-
-    try {
-      await navigator.clipboard.writeText(url);
-      $('copyOverlay').textContent = '✓ URL copiada';
-      setTimeout(
-        () => $('copyOverlay').textContent='Copiar URL del overlay',
-        1500
-      );
-    } catch(e) {
-      prompt('Copia esta URL:', url);
-    }
-  });
-
-  $('connectBtn').addEventListener('click', () => {
-    const sid = $('senderId').value.trim();
-
-    if (!sid) {
-      setStatus($('recvStatus'), 'falta el ID del HONOR');
-      return;
-    }
-
-    const rpeer = new Peer();
-
-    setStatus($('recvStatus'), 'conectando…');
-
-    rpeer.on('open', () => {
-      const conn = rpeer.connect(sid, {reliable:true});
-
-      conn.on('open', () => {
-        setStatus($('recvStatus'), 'conectado al HONOR', true);
-      });
-
-      conn.on('data', data => {
-        if (data?.mouth === 'open') {
-          $('mouthImg').src = $('openUrl').value.trim();
-        } else if (data?.mouth === 'closed') {
-          $('mouthImg').src = $('closedUrl').value.trim();
-        }
-      });
-    });
-
-    rpeer.on('call', call => {
-      call.answer();
-
-      call.on('stream', stream => {
-        $('remoteAudio').srcObject = stream;
-        $('remoteAudio').play().catch(()=>{});
-      });
-    });
-
-    rpeer.on('error', e => {
-      setStatus(
-        $('recvStatus'),
-        'error: ' + (e.type || e.message || e)
-      );
-    });
-  });
+(()=>{
+'use strict';
+const FIXED_ID='704004476';
+const $=id=>document.getElementById(id);
+const params=new URLSearchParams(location.search);
+const isOverlay=params.get('mode')==='overlay';
+const app=$('app');
+function setStatus(el,text,good=false){if(!el)return;el.textContent=text;el.className=good?'ok':'';}
+
+/* ================= OVERLAY / PRISM ================= */
+if(isOverlay){
+ document.documentElement.classList.add('overlay-mode');
+ document.body.style.background='transparent';
+ document.body.style.padding='0';
+ app.classList.add('hidden');
+ const root=document.createElement('div');root.id='overlayRoot';document.body.appendChild(root);
+ const img=document.createElement('img');root.appendChild(img);
+ const openUrl=params.get('open')||'open.png';
+ const closedUrl=params.get('closed')||'closed.png';
+ img.src=closedUrl;
+ let audioEl=null;
+ function setMouth(open){img.src=open?openUrl:closedUrl;}
+ const peer=new Peer();
+ peer.on('open',()=>{
+   const conn=peer.connect(FIXED_ID,{reliable:true});
+   conn.on('open',()=>conn.send({type:'hello'}));
+   conn.on('data',data=>{if(data==='OPEN'||data===1||data?.mouth==='open')setMouth(true);if(data==='CLOSED'||data===0||data?.mouth==='closed')setMouth(false);});
+ });
+ peer.on('call',call=>{
+   call.answer();
+   call.on('stream',stream=>{
+     if(!audioEl){audioEl=document.createElement('audio');audioEl.autoplay=true;audioEl.playsInline=true;audioEl.style.display='none';document.body.appendChild(audioEl);}
+     audioEl.srcObject=stream;audioEl.volume=1;
+     const p=audioEl.play();if(p&&p.catch)p.catch(()=>{});
+   });
+ });
+ peer.on('error',e=>console.log('Overlay PeerJS:',e));
+ return;
+}
+
+/* ================= HONOR ================= */
+let peer=null,micStream=null,audioCtx=null,source=null,analyser=null,dest=null,processedStream=null;
+let gate=null,voiceBus=null,compressor=null,highpass=null,lowpass=null;
+let effectNodes=[],delay=null,feedback=null,delayWet=null,lfo=null,lfoGain=null,wave=null;
+let speaking=false,lastOpen=0,lastSent=null,lastSendTime=0,threshold=parseFloat($('threshold').value),holdMs=parseInt($('hold').value,10);
+let noiseFloor=0.012,calibrating=false;
+
+$('threshold').addEventListener('input',e=>{threshold=parseFloat(e.target.value);$('thresholdValue').textContent=threshold.toFixed(3);});
+$('hold').addEventListener('input',e=>{holdMs=Math.max(0,parseInt(e.target.value||'0',10));});
+$('effectAmount').addEventListener('input',e=>{$('effectAmountValue').textContent=Math.round(e.target.value*100)+'%';if(audioCtx)buildVoiceChain();});
+$('voiceVolume').addEventListener('input',e=>{$('voiceVolumeValue').textContent=Math.round(e.target.value*100)+'%';if(voiceBus)voiceBus.gain.value=parseFloat(e.target.value);});
+$('voiceEffect').addEventListener('change',()=>{if(audioCtx)buildVoiceChain();});
+$('resetThreshold').addEventListener('click',()=>{threshold=0.035;$('threshold').value='0.035';$('thresholdValue').textContent='0.035';noiseFloor=0.012;$('noiseInfo').textContent='Umbral restablecido.';});
+
+function broadcastMouth(force=false){
+ const state=speaking?'open':'closed',now=performance.now();
+ if(!force&&state===lastSent&&now-lastSendTime<100)return;
+ lastSent=state;lastSendTime=now;
+ if(!peer||!peer.connections)return;
+ for(const list of Object.values(peer.connections))for(const c of list)if(c.open){try{c.send({type:'mouth',mouth:state});}catch(e){}}
+}
+function callOverlay(remotePeerId){if(!processedStream||!peer)return;try{const call=peer.call(remotePeerId,processedStream);call.on('error',e=>console.log('Audio call:',e));}catch(e){console.log(e);}}
+
+peer=new Peer(FIXED_ID,{debug:1});
+peer.on('open',id=>{ $('peerId').textContent=id;setStatus($('sendStatus'),'ID fijo conectado / listo',true);});
+peer.on('connection',conn=>{
+ conn.on('open',()=>{broadcastMouth(true);if(processedStream)callOverlay(conn.peer);});
+ conn.on('data',data=>{if(data?.type==='hello'&&processedStream)callOverlay(conn.peer);});
+});
+peer.on('error',e=>{
+ const type=e&&e.type?e.type:'';
+ if(type==='unavailable-id')setStatus($('sendStatus'),'ID 704004476 ocupado. Cierra la otra sesión del HONOR.');
+ else setStatus($('sendStatus'),'error: '+(type||e.message||e));
+});
+
+function clearNodes(){
+ for(const n of effectNodes){try{n.disconnect();}catch(e){}}effectNodes=[];
+ if(delay){try{delay.disconnect();}catch(e){}}if(feedback){try{feedback.disconnect();}catch(e){}}if(delayWet){try{delayWet.disconnect();}catch(e){}}
+ if(lfo){try{lfo.stop();}catch(e){}}if(lfoGain){try{lfoGain.disconnect();}catch(e){}}if(wave){try{wave.disconnect();}catch(e){}}
+ delay=feedback=delayWet=lfo=lfoGain=wave=null;
+}
+function makeDistortion(amount){const sh=audioCtx.createWaveShaper();const n=44100;const curve=new Float32Array(n);const k=amount*400+1;for(let i=0;i<n;i++){const x=i*2/n-1;curve[i]=(1+k)*x/(1+k*Math.abs(x));}sh.curve=curve;sh.oversample='4x';return sh;}
+function buildVoiceChain(){
+ if(!audioCtx||!source||!dest)return;
+ clearNodes();
+ if(!voiceBus){voiceBus=audioCtx.createGain();voiceBus.gain.value=parseFloat($('voiceVolume').value);}
+ else voiceBus.gain.value=parseFloat($('voiceVolume').value);
+ const amount=parseFloat($('effectAmount').value),type=$('voiceEffect').value;
+ highpass=audioCtx.createBiquadFilter();highpass.type='highpass';highpass.frequency.value=70;
+ lowpass=audioCtx.createBiquadFilter();lowpass.type='lowpass';lowpass.frequency.value=10000;
+ compressor=audioCtx.createDynamicsCompressor();compressor.threshold.value=-24;compressor.knee.value=18;compressor.ratio.value=3;compressor.attack.value=.003;compressor.release.value=.12;
+ source.disconnect();source.connect(highpass);highpass.connect(lowpass);
+ let chain=lowpass;
+ if(type==='deep'){const f=audioCtx.createBiquadFilter();f.type='lowshelf';f.frequency.value=220;f.gain.value=12*amount;chain.connect(f);chain=f;effectNodes.push(f);}
+ if(type==='high'){const f=audioCtx.createBiquadFilter();f.type='highshelf';f.frequency.value=1800;f.gain.value=10*amount;chain.connect(f);chain=f;effectNodes.push(f);}
+ if(type==='radio'||type==='megaphone'){const hp=audioCtx.createBiquadFilter();hp.type='highpass';hp.frequency.value=type==='radio'?500:700;const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=type==='radio'?3200:3600;chain.connect(hp);hp.connect(lp);chain=lp;effectNodes.push(hp,lp);}
+ if(type==='distortion'||type==='monster'){const d=makeDistortion(type==='monster'?Math.min(1,amount*1.3):amount);chain.connect(d);chain=d;effectNodes.push(d);}
+ if(type==='robot'){lfo=audioCtx.createOscillator();lfo.frequency.value=55+35*amount;lfoGain=audioCtx.createGain();lfoGain.gain.value=.5*amount;lfo.connect(lfoGain);lfoGain.connect(voiceBus.gain);lfo.start();effectNodes.push(lfoGain);}
+ if(type==='echo'||type==='space'){
+   delay=audioCtx.createDelay(1.0);delay.delayTime.value=type==='echo'?.22:.38;
+   feedback=audioCtx.createGain();feedback.gain.value=type==='echo'?.22*amount:.28*amount;
+   delayWet=audioCtx.createGain();delayWet.gain.value=.45*amount;
+   chain.connect(delay);delay.connect(feedback);feedback.connect(delay);delay.connect(delayWet);delayWet.connect(voiceBus);effectNodes.push(delay,feedback,delayWet);
+ }
+ chain.connect(compressor);compressor.connect(voiceBus);voiceBus.connect(dest);
+}
+
+$('startBtn').addEventListener('click',async()=>{
+ try{
+  $('startBtn').disabled=true;setStatus($('sendStatus'),'solicitando permiso…');
+  micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false,channelCount:1},video:false});
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();await audioCtx.resume();
+  source=audioCtx.createMediaStreamSource(micStream);analyser=audioCtx.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.08;
+  gate=audioCtx.createGain();gate.gain.value=0;dest=audioCtx.createMediaStreamDestination();processedStream=dest.stream;
+  buildVoiceChain();
+  $('calibrateBtn').disabled=false;setStatus($('sendStatus'),'micrófono activo',true);$('startBtn').textContent='🎙️ Micrófono activo';
+  for(const list of Object.values(peer.connections||{}))for(const c of list)if(c.open)callOverlay(c.peer);
+  const data=new Uint8Array(analyser.fftSize);
+  const tick=()=>{
+   analyser.getByteTimeDomainData(data);let sum=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}const rms=Math.sqrt(sum/data.length);
+   $('meterBar').style.width=Math.min(100,rms*500)+'%';const now=performance.now();
+   const dynamic=Math.max(threshold,noiseFloor*2.2+0.006);
+   if(rms>=dynamic){speaking=true;lastOpen=now;}else if(now-lastOpen>holdMs){speaking=false;}
+   gate.gain.setTargetAtTime(speaking?1:0,audioCtx.currentTime,speaking?.012:.045);
+   $('mouthState').textContent=speaking?'ABIERTA':'CERRADA';$('mouthState').className='big '+(speaking?'ok':'');broadcastMouth();requestAnimationFrame(tick);
+  };tick();
+ }catch(e){console.error(e);$('startBtn').disabled=false;setStatus($('sendStatus'),'permiso/error: '+(e.message||e));}
+});
+
+$('calibrateBtn').addEventListener('click',async()=>{
+ if(!analyser||calibrating)return;calibrating=true;$('calibrateBtn').disabled=true;$('noiseInfo').textContent='Calibrando… no hables durante 3 segundos.';
+ const data=new Uint8Array(analyser.fftSize),values=[];const start=performance.now();
+ const sample=()=>{analyser.getByteTimeDomainData(data);let sum=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}values.push(Math.sqrt(sum/data.length));if(performance.now()-start<3000)requestAnimationFrame(sample);else{values.sort((a,b)=>a-b);noiseFloor=values[Math.floor(values.length*.8)]||.012;threshold=Math.max(.012,noiseFloor*2.4);$('threshold').value=threshold;$('thresholdValue').textContent=threshold.toFixed(3);$('noiseInfo').textContent='Ruido medido: '+noiseFloor.toFixed(4)+' • umbral ajustado: '+threshold.toFixed(3);calibrating=false;$('calibrateBtn').disabled=false;}};sample();
+});
+
+function overlayUrl(){const base=location.origin+location.pathname;return base+'?mode=overlay&sender='+encodeURIComponent(FIXED_ID)+'&open='+encodeURIComponent('open.png')+'&closed='+encodeURIComponent('closed.png');}
+$('copyOverlay').addEventListener('click',async()=>{const url=overlayUrl();try{await navigator.clipboard.writeText(url);$('copyOverlay').textContent='✓ URL copiada';setTimeout(()=>$('copyOverlay').textContent='📋 Copiar URL del overlay',1600);}catch(e){prompt('Copia esta URL:',url);}});
 })();
 </script>
 </body>
-</html>
+  </html>
+  
