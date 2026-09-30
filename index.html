@@ -137,7 +137,7 @@ function buildVoiceChain(){
  highpass=audioCtx.createBiquadFilter();highpass.type='highpass';highpass.frequency.value=70;
  lowpass=audioCtx.createBiquadFilter();lowpass.type='lowpass';lowpass.frequency.value=10000;
  compressor=audioCtx.createDynamicsCompressor();compressor.threshold.value=-24;compressor.knee.value=18;compressor.ratio.value=3;compressor.attack.value=.003;compressor.release.value=.12;
- source.disconnect();source.connect(highpass);highpass.connect(lowpass);
+ source.disconnect();source.connect(analyser);source.connect(gate);gate.connect(highpass);highpass.connect(lowpass);
  let chain=lowpass;
  if(type==='deep'){const f=audioCtx.createBiquadFilter();f.type='lowshelf';f.frequency.value=220;f.gain.value=12*amount;chain.connect(f);chain=f;effectNodes.push(f);}
  if(type==='high'){const f=audioCtx.createBiquadFilter();f.type='highshelf';f.frequency.value=1800;f.gain.value=10*amount;chain.connect(f);chain=f;effectNodes.push(f);}
@@ -159,7 +159,9 @@ $('startBtn').addEventListener('click',async()=>{
   micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false,channelCount:1},video:false});
   audioCtx=new(window.AudioContext||window.webkitAudioContext)();await audioCtx.resume();
   source=audioCtx.createMediaStreamSource(micStream);analyser=audioCtx.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.08;
-  gate=audioCtx.createGain();gate.gain.value=0;dest=audioCtx.createMediaStreamDestination();processedStream=dest.stream;
+  gate=audioCtx.createGain();gate.gain.value=0;
+  source.connect(analyser);
+  dest=audioCtx.createMediaStreamDestination();processedStream=dest.stream;
   buildVoiceChain();
   $('calibrateBtn').disabled=false;setStatus($('sendStatus'),'micrófono activo',true);$('startBtn').textContent='🎙️ Micrófono activo';
   for(const list of Object.values(peer.connections||{}))for(const c of list)if(c.open)callOverlay(c.peer);
@@ -170,7 +172,7 @@ $('startBtn').addEventListener('click',async()=>{
    const dynamic=Math.max(threshold,noiseFloor*2.2+0.006);
    if(rms>=dynamic){speaking=true;lastOpen=now;}else if(now-lastOpen>holdMs){speaking=false;}
    gate.gain.setTargetAtTime(speaking?1:0,audioCtx.currentTime,speaking?.012:.045);
-   $('mouthState').textContent=speaking?'ABIERTA':'CERRADA';$('mouthState').className='big '+(speaking?'ok':'');broadcastMouth();requestAnimationFrame(tick);
+   $('mouthState').textContent=speaking?'ABIERTA':'CERRADA';$('mouthState').className='big '+(speaking?'ok':'');$('mouthImg').src=speaking?'open.png':'closed.png';broadcastMouth();requestAnimationFrame(tick);
   };tick();
  }catch(e){console.error(e);$('startBtn').disabled=false;setStatus($('sendStatus'),'permiso/error: '+(e.message||e));}
 });
@@ -186,5 +188,4 @@ $('copyOverlay').addEventListener('click',async()=>{const url=overlayUrl();try{a
 })();
 </script>
 </body>
-  </html>
-  
+</html>
