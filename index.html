@@ -122,33 +122,84 @@ peer.on('error',e=>{
 });
 
 function clearNodes(){
- for(const n of effectNodes){try{n.disconnect();}catch(e){}}effectNodes=[];
- if(delay){try{delay.disconnect();}catch(e){}}if(feedback){try{feedback.disconnect();}catch(e){}}if(delayWet){try{delayWet.disconnect();}catch(e){}}
- if(lfo){try{lfo.stop();}catch(e){}}if(lfoGain){try{lfoGain.disconnect();}catch(e){}}if(wave){try{wave.disconnect();}catch(e){}}
+ try{source&&source.disconnect();}catch(e){}
+ try{gate&&gate.disconnect();}catch(e){}
+ try{voiceBus&&voiceBus.disconnect();}catch(e){}
+ try{highpass&&highpass.disconnect();}catch(e){}
+ try{lowpass&&lowpass.disconnect();}catch(e){}
+ try{compressor&&compressor.disconnect();}catch(e){}
+ for(const n of effectNodes){try{n.disconnect();}catch(e){}}
+ effectNodes=[];
+ if(delay){try{delay.disconnect();}catch(e){}}
+ if(feedback){try{feedback.disconnect();}catch(e){}}
+ if(delayWet){try{delayWet.disconnect();}catch(e){}}
+ if(lfo){try{lfo.stop();}catch(e){}}
+ if(lfoGain){try{lfoGain.disconnect();}catch(e){}}
+ if(wave){try{wave.disconnect();}catch(e){}}
  delay=feedback=delayWet=lfo=lfoGain=wave=null;
 }
-function makeDistortion(amount){const sh=audioCtx.createWaveShaper();const n=44100;const curve=new Float32Array(n);const k=amount*400+1;for(let i=0;i<n;i++){const x=i*2/n-1;curve[i]=(1+k)*x/(1+k*Math.abs(x));}sh.curve=curve;sh.oversample='4x';return sh;}
+function makeDistortion(amount){
+ const sh=audioCtx.createWaveShaper();
+ const n=44100,curve=new Float32Array(n),k=amount*500+1;
+ for(let i=0;i<n;i++){const x=i*2/n-1;curve[i]=(1+k)*x/(1+k*Math.abs(x));}
+ sh.curve=curve;sh.oversample='4x';return sh;
+}
 function buildVoiceChain(){
- if(!audioCtx||!source||!dest)return;
+ if(!audioCtx||!source||!dest||!gate)return;
  clearNodes();
- if(!voiceBus){voiceBus=audioCtx.createGain();voiceBus.gain.value=parseFloat($('voiceVolume').value);}
- else voiceBus.gain.value=parseFloat($('voiceVolume').value);
  const amount=parseFloat($('effectAmount').value),type=$('voiceEffect').value;
+ voiceBus=audioCtx.createGain();voiceBus.gain.value=parseFloat($('voiceVolume').value);
  highpass=audioCtx.createBiquadFilter();highpass.type='highpass';highpass.frequency.value=70;
  lowpass=audioCtx.createBiquadFilter();lowpass.type='lowpass';lowpass.frequency.value=10000;
- compressor=audioCtx.createDynamicsCompressor();compressor.threshold.value=-24;compressor.knee.value=18;compressor.ratio.value=3;compressor.attack.value=.003;compressor.release.value=.12;
- source.disconnect();source.connect(analyser);source.connect(gate);gate.connect(highpass);highpass.connect(lowpass);
+ compressor=audioCtx.createDynamicsCompressor();compressor.threshold.value=-22;compressor.knee.value=18;compressor.ratio.value=4;compressor.attack.value=.003;compressor.release.value=.12;
+ source.connect(analyser);
+ source.connect(gate);
+ gate.connect(highpass);highpass.connect(lowpass);
  let chain=lowpass;
- if(type==='deep'){const f=audioCtx.createBiquadFilter();f.type='lowshelf';f.frequency.value=220;f.gain.value=12*amount;chain.connect(f);chain=f;effectNodes.push(f);}
- if(type==='high'){const f=audioCtx.createBiquadFilter();f.type='highshelf';f.frequency.value=1800;f.gain.value=10*amount;chain.connect(f);chain=f;effectNodes.push(f);}
- if(type==='radio'||type==='megaphone'){const hp=audioCtx.createBiquadFilter();hp.type='highpass';hp.frequency.value=type==='radio'?500:700;const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=type==='radio'?3200:3600;chain.connect(hp);hp.connect(lp);chain=lp;effectNodes.push(hp,lp);}
- if(type==='distortion'||type==='monster'){const d=makeDistortion(type==='monster'?Math.min(1,amount*1.3):amount);chain.connect(d);chain=d;effectNodes.push(d);}
- if(type==='robot'){lfo=audioCtx.createOscillator();lfo.frequency.value=55+35*amount;lfoGain=audioCtx.createGain();lfoGain.gain.value=.5*amount;lfo.connect(lfoGain);lfoGain.connect(voiceBus.gain);lfo.start();effectNodes.push(lfoGain);}
+ if(type==='deep'){
+   const f=audioCtx.createBiquadFilter();f.type='lowshelf';f.frequency.value=320;f.gain.value=18*amount;
+   const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=6500-2500*amount;
+   chain.connect(f);f.connect(lp);chain=lp;effectNodes.push(f,lp);
+   const d=makeDistortion(.12*amount);chain.connect(d);chain=d;effectNodes.push(d);
+ }
+ if(type==='high'){
+   const f=audioCtx.createBiquadFilter();f.type='highshelf';f.frequency.value=1400;f.gain.value=18*amount;
+   const hp=audioCtx.createBiquadFilter();hp.type='highpass';hp.frequency.value=180+420*amount;
+   chain.connect(f);f.connect(hp);chain=hp;effectNodes.push(f,hp);
+   const presence=audioCtx.createBiquadFilter();presence.type='peaking';presence.frequency.value=2800;presence.Q.value=1.2;presence.gain.value=8*amount;
+   chain.connect(presence);chain=presence;effectNodes.push(presence);
+ }
+ if(type==='radio'||type==='megaphone'){
+   const hp=audioCtx.createBiquadFilter();hp.type='highpass';hp.frequency.value=type==='radio'?450:650;
+   const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=type==='radio'?3000:3300;
+   const peak=audioCtx.createBiquadFilter();peak.type='peaking';peak.frequency.value=1500;peak.Q.value=1.1;peak.gain.value=10*amount;
+   chain.connect(hp);hp.connect(lp);lp.connect(peak);chain=peak;effectNodes.push(hp,lp,peak);
+   const d=makeDistortion(.35*amount);chain.connect(d);chain=d;effectNodes.push(d);
+ }
+ if(type==='distortion'||type==='monster'){
+   const d=makeDistortion(type==='monster'?Math.min(1,amount*1.7):Math.min(1,amount*1.25));
+   chain.connect(d);chain=d;effectNodes.push(d);
+   if(type==='monster'){
+     const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=4200;
+     const low=audioCtx.createBiquadFilter();low.type='lowshelf';low.frequency.value=180;low.gain.value=14*amount;
+     chain.connect(lp);lp.connect(low);chain=low;effectNodes.push(lp,low);
+   }
+ }
+ if(type==='robot'){
+   // Modulación de amplitud fuerte y audible (voz robótica).
+   lfo=audioCtx.createOscillator();lfo.frequency.value=65+35*amount;
+   lfoGain=audioCtx.createGain();lfoGain.gain.value=.48*amount;
+   lfo.connect(lfoGain);lfoGain.connect(voiceBus.gain);lfo.start();
+   effectNodes.push(lfoGain);
+   const bp=audioCtx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=1200;bp.Q.value=1.1+amount*2;
+   chain.connect(bp);chain=bp;effectNodes.push(bp);
+ }
  if(type==='echo'||type==='space'){
-   delay=audioCtx.createDelay(1.0);delay.delayTime.value=type==='echo'?.22:.38;
-   feedback=audioCtx.createGain();feedback.gain.value=type==='echo'?.22*amount:.28*amount;
-   delayWet=audioCtx.createGain();delayWet.gain.value=.45*amount;
-   chain.connect(delay);delay.connect(feedback);feedback.connect(delay);delay.connect(delayWet);delayWet.connect(voiceBus);effectNodes.push(delay,feedback,delayWet);
+   delay=audioCtx.createDelay(1.0);delay.delayTime.value=type==='echo'?.24:.42;
+   feedback=audioCtx.createGain();feedback.gain.value=(type==='echo'?.30:.36)*amount;
+   delayWet=audioCtx.createGain();delayWet.gain.value=.55*amount;
+   chain.connect(delay);delay.connect(feedback);feedback.connect(delay);delay.connect(delayWet);delayWet.connect(voiceBus);
+   effectNodes.push(delay,feedback,delayWet);
  }
  chain.connect(compressor);compressor.connect(voiceBus);voiceBus.connect(dest);
 }
@@ -188,4 +239,5 @@ $('copyOverlay').addEventListener('click',async()=>{const url=overlayUrl();try{a
 })();
 </script>
 </body>
-</html>
+ </html>
+ 
