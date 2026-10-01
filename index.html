@@ -81,7 +81,7 @@ if(overlay){
        try{
          call.answer();
          call.on('stream',stream=>{const a=ensureAudio();a.srcObject=stream;a.volume=1;play();setTimeout(play,250);setTimeout(play,1000)});
-         call.on('close',()=>{try{dataConn?.send({type:'hello'})}catch(e){}});
+         call.on('close',()=>{try{dataConn?.send({type:'request-audio'})}catch(e){}});
        }catch(e){}
      });
      peer.on('disconnected',()=>{try{peer.reconnect()}catch(e){recreatePeer()}});
@@ -117,8 +117,7 @@ function broadcast(force=false){
 }
 function stopCall(id){const c=calls.get(id);if(c){try{c.close()}catch(e){}calls.delete(id)}}
 function callOverlay(id){
- if(!processed||!peer?.open||!id)return;
- stopCall(id);
+ if(!processed||!peer?.open||!id||calls.has(id))return;
  try{const c=peer.call(id,processed);calls.set(id,c);c.on('close',()=>{if(calls.get(id)===c)calls.delete(id)});c.on('error',()=>{if(calls.get(id)===c)calls.delete(id)})}catch(e){}
 }
 function restartPeer(ms=1200){if(peerRestart||starting)return;peerRestart=setTimeout(()=>{peerRestart=null;startPeer()},ms)}
@@ -127,8 +126,9 @@ function startPeer(){
  peer=new Peer(ID,{debug:0});
  peer.on('open',id=>{starting=false;$('peerId').textContent=id;setStatus($('sendStatus'),'Conectado • ID fijo listo',true);broadcast(true)});
  peer.on('connection',c=>{
-   c.on('open',()=>{broadcast(true);if(processed)callOverlay(c.peer)});
-   c.on('data',d=>{if(d?.type==='hello'){broadcast(true);if(processed)callOverlay(c.peer)}});
+   const hello=()=>{broadcast(true);if(processed&&!calls.has(c.peer))callOverlay(c.peer)};
+   c.on('open',hello);
+   c.on('data',d=>{if(d?.type==='hello'||d?.type==='request-audio')hello()});
    c.on('close',()=>stopCall(c.peer));c.on('error',()=>stopCall(c.peer));
  });
  peer.on('disconnected',()=>{setStatus($('sendStatus'),'Reconectando…');try{peer.reconnect()}catch(e){restartPeer()}});
@@ -176,8 +176,11 @@ $('startBtn').onclick=async()=>{
  try{
   $('startBtn').disabled=true;setStatus($('sendStatus'),'Solicitando micrófono…');
   mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false,channelCount:1}});
-  ctx=new(window.AudioContext||window.webkitAudioContext)();await ctx.resume();source=ctx.createMediaStreamSource(mic);analyser=ctx.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.08;dest=ctx.createMediaStreamDestination();processed=dest.stream;buildVoice();
+  ctx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});await ctx.resume();source=ctx.createMediaStreamSource(mic);analyser=ctx.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.08;dest=ctx.createMediaStreamDestination();processed=dest.stream;buildVoice();
   $('calibrateBtn').disabled=false;setStatus($('sendStatus'),'Micrófono activo',true);$('startBtn').textContent='Micrófono activo';
+  const wakeAudio=()=>{if(ctx&&ctx.state!=='running')ctx.resume().catch(()=>{})};
+  document.addEventListener('visibilitychange',wakeAudio);
+  addEventListener('pageshow',wakeAudio);
   for(const list of Object.values(peer?.connections||{}))for(const c of list)if(c.open)callOverlay(c.peer);
   const data=new Uint8Array(analyser.fftSize);
   const tick=()=>{if(!analyser)return;analyser.getByteTimeDomainData(data);let sum=0;for(const v0 of data){const v=(v0-128)/128;sum+=v*v}const rms=Math.sqrt(sum/data.length);$('meterBar').style.width=Math.min(100,rms*500)+'%';const now=performance.now(),dynamic=Math.max(threshold,noiseFloor*2.2+.006);if(rms>=dynamic){speaking=true;lastOpen=now}else if(now-lastOpen>hold)speaking=false;if(gate)gate.gain.setTargetAtTime(speaking?1:0,ctx.currentTime,speaking?.012:.045);$('mouthState').textContent=speaking?'ABIERTA':'CERRADA';$('mouthState').className='big '+(speaking?'ok':'');$('localStatus').textContent=speaking?'ABIERTA':'CERRADA';$('mouthImg').src=speaking?'open.png':'closed.png';broadcast();requestAnimationFrame(tick)};tick();
