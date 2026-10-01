@@ -66,32 +66,61 @@ if(isOverlay){
  const openUrl=params.get('open')||'open.png';
  const closedUrl=params.get('closed')||'closed.png';
  img.src=closedUrl;
- let audioEl=null;
+ let peer=null,conn=null,audioEl=null,retryTimer=null,retryDelay=700;
+ let destroyed=false,lastAudioCall=null;
  function setMouth(open){img.src=open?openUrl:closedUrl;}
- const peer=new Peer();
- peer.on('open',()=>{
-   const conn=peer.connect(FIXED_ID,{reliable:true});
-   conn.on('open',()=>conn.send({type:'hello'}));
-   conn.on('data',data=>{if(data==='OPEN'||data===1||data?.mouth==='open')setMouth(true);if(data==='CLOSED'||data===0||data?.mouth==='closed')setMouth(false);});
- });
- peer.on('call',call=>{
-   call.answer();
-   call.on('stream',stream=>{
-     if(!audioEl){audioEl=document.createElement('audio');audioEl.autoplay=true;audioEl.playsInline=true;audioEl.style.display='none';document.body.appendChild(audioEl);}
-     audioEl.srcObject=stream;audioEl.volume=1;
-     const p=audioEl.play();if(p&&p.catch)p.catch(()=>{});
-   });
- });
- peer.on('error',e=>console.log('Overlay PeerJS:',e));
+ function ensureAudioElement(){
+   if(!audioEl){audioEl=document.createElement('audio');audioEl.autoplay=true;audioEl.playsInline=true;audioEl.setAttribute('playsinline','');audioEl.style.display='none';document.body.appendChild(audioEl);}
+   return audioEl;
+ }
+ function playRemote(){if(!audioEl)return;const p=audioEl.play();if(p&&p.catch)p.catch(()=>{});}
+ function connectToHonor(){
+   if(destroyed||!peer||peer.destroyed)return;
+   try{if(conn){try{conn.close();}catch(e){}} conn=peer.connect(FIXED_ID,{reliable:true});
+     conn.on('open',()=>{retryDelay=700;try{conn.send({type:'hello'});}catch(e){};});
+     conn.on('data',data=>{
+       if(data?.type==='mouth')setMouth(data.mouth==='open');
+       else if(data==='OPEN'||data===1)setMouth(true);
+       else if(data==='CLOSED'||data===0)setMouth(false);
+     });
+     conn.on('close',()=>scheduleReconnect());
+     conn.on('error',()=>scheduleReconnect());
+   }catch(e){scheduleReconnect();}
+ }
+ function scheduleReconnect(){
+   if(destroyed||retryTimer)return;
+   retryTimer=setTimeout(()=>{retryTimer=null;connectToHonor();retryDelay=Math.min(retryDelay*1.7,5000);},retryDelay);
+ }
+ function createPeer(){
+   if(destroyed)return;
+   try{peer=new Peer(undefined,{debug:0});
+     peer.on('open',()=>{retryDelay=700;connectToHonor();});
+     peer.on('call',call=>{
+       try{call.answer();lastAudioCall=call;
+         call.on('stream',stream=>{const el=ensureAudioElement();el.srcObject=stream;el.volume=1;playRemote();setTimeout(playRemote,300);setTimeout(playRemote,1200);});
+         call.on('close',()=>{if(lastAudioCall===call)lastAudioCall=null;});
+         call.on('error',()=>{});
+       }catch(e){}
+     });
+     peer.on('disconnected',()=>{try{peer.reconnect();}catch(e){}});
+     peer.on('close',()=>{peer=null;scheduleReconnectPeer();});
+     peer.on('error',e=>{if(e?.type==='peer-unavailable')scheduleReconnect();else if(e?.type==='network')scheduleReconnectPeer();});
+   }catch(e){scheduleReconnectPeer();}
+ }
+ let peerRetry=null;
+ function scheduleReconnectPeer(){if(destroyed||peerRetry)return;peerRetry=setTimeout(()=>{peerRetry=null;createPeer();},1500);}
+ createPeer();
+ window.addEventListener('beforeunload',()=>{destroyed=true;if(retryTimer)clearTimeout(retryTimer);if(peerRetry)clearTimeout(peerRetry);try{conn?.close();peer?.destroy();}catch(e){}});
  return;
 }
 
 /* ================= HONOR ================= */
 let peer=null,micStream=null,audioCtx=null,source=null,analyser=null,dest=null,processedStream=null;
 let gate=null,voiceBus=null,compressor=null,highpass=null,lowpass=null;
-let effectNodes=[],delay=null,feedback=null,delayWet=null,lfo=null,lfoGain=null,wave=null;
+let effectNodes=[],delay=null,feedback=null,delayWet=null,lfo=null,lfoGain=null,tremolo=null;
 let speaking=false,lastOpen=0,lastSent=null,lastSendTime=0,threshold=parseFloat($('threshold').value),holdMs=parseInt($('hold').value,10);
 let noiseFloor=0.012,calibrating=false;
+const activeCalls=new Map();
 
 $('threshold').addEventListener('input',e=>{threshold=parseFloat(e.target.value);$('thresholdValue').textContent=threshold.toFixed(3);});
 $('hold').addEventListener('input',e=>{holdMs=Math.max(0,parseInt(e.target.value||'0',10));});
@@ -104,131 +133,121 @@ function broadcastMouth(force=false){
  const state=speaking?'open':'closed',now=performance.now();
  if(!force&&state===lastSent&&now-lastSendTime<100)return;
  lastSent=state;lastSendTime=now;
- if(!peer||!peer.connections)return;
- for(const list of Object.values(peer.connections))for(const c of list)if(c.open){try{c.send({type:'mouth',mouth:state});}catch(e){}}
+ if(!peer||peer.destroyed)return;
+ for(const list of Object.values(peer.connections||{}))for(const c of list)if(c.open){try{c.send({type:'mouth',mouth:state});}catch(e){}}
 }
-function callOverlay(remotePeerId){if(!processedStream||!peer)return;try{const call=peer.call(remotePeerId,processedStream);call.on('error',e=>console.log('Audio call:',e));}catch(e){console.log(e);}}
+function stopCallFor(id){const c=activeCalls.get(id);if(c){try{c.close();}catch(e){}activeCalls.delete(id);}}
+function callOverlay(remotePeerId){
+ if(!processedStream||!peer||peer.destroyed||!remotePeerId)return;
+ stopCallFor(remotePeerId);
+ try{
+   const call=peer.call(remotePeerId,processedStream);
+   activeCalls.set(remotePeerId,call);
+   call.on('close',()=>{if(activeCalls.get(remotePeerId)===call)activeCalls.delete(remotePeerId);});
+   call.on('error',()=>{if(activeCalls.get(remotePeerId)===call)activeCalls.delete(remotePeerId);});
+ }catch(e){}
+}
 
-peer=new Peer(FIXED_ID,{debug:1});
-peer.on('open',id=>{ $('peerId').textContent=id;setStatus($('sendStatus'),'ID fijo conectado / listo',true);});
-peer.on('connection',conn=>{
- conn.on('open',()=>{broadcastMouth(true);if(processedStream)callOverlay(conn.peer);});
- conn.on('data',data=>{if(data?.type==='hello'&&processedStream)callOverlay(conn.peer);});
-});
-peer.on('error',e=>{
- const type=e&&e.type?e.type:'';
- if(type==='unavailable-id')setStatus($('sendStatus'),'ID 704004476 ocupado. Cierra la otra sesión del HONOR.');
- else setStatus($('sendStatus'),'error: '+(type||e.message||e));
-});
+function startHonorPeer(){
+ peer=new Peer(FIXED_ID,{debug:0});
+ peer.on('open',id=>{$('peerId').textContent=id;setStatus($('sendStatus'),'ID fijo conectado / listo',true);});
+ peer.on('connection',conn=>{
+   conn.on('open',()=>{broadcastMouth(true);if(processedStream)callOverlay(conn.peer);});
+   conn.on('data',data=>{if(data?.type==='hello'){broadcastMouth(true);if(processedStream)callOverlay(conn.peer);}});
+   conn.on('close',()=>stopCallFor(conn.peer));
+   conn.on('error',()=>stopCallFor(conn.peer));
+ });
+ peer.on('disconnected',()=>{setStatus($('sendStatus'),'reconectando PeerJS…');try{peer.reconnect();}catch(e){}});
+ peer.on('close',()=>{setStatus($('sendStatus'),'PeerJS cerrado. Recarga la página del HONOR.');});
+ peer.on('error',e=>{
+   const type=e?.type||'';
+   if(type==='unavailable-id')setStatus($('sendStatus'),'ID 704004476 ocupado. Cierra cualquier otra pestaña HONOR.');
+   else if(type==='network')setStatus($('sendStatus'),'Red PeerJS temporalmente desconectada…');
+   else setStatus($('sendStatus'),'error: '+(type||e.message||e));
+ });
+}
+startHonorPeer();
 
-function clearNodes(){
- try{source&&source.disconnect();}catch(e){}
- try{gate&&gate.disconnect();}catch(e){}
- try{voiceBus&&voiceBus.disconnect();}catch(e){}
- try{highpass&&highpass.disconnect();}catch(e){}
- try{lowpass&&lowpass.disconnect();}catch(e){}
- try{compressor&&compressor.disconnect();}catch(e){}
- for(const n of effectNodes){try{n.disconnect();}catch(e){}}
- effectNodes=[];
- if(delay){try{delay.disconnect();}catch(e){}}
- if(feedback){try{feedback.disconnect();}catch(e){}}
- if(delayWet){try{delayWet.disconnect();}catch(e){}}
- if(lfo){try{lfo.stop();}catch(e){}}
- if(lfoGain){try{lfoGain.disconnect();}catch(e){}}
- if(wave){try{wave.disconnect();}catch(e){}}
- delay=feedback=delayWet=lfo=lfoGain=wave=null;
+function disconnectNode(n){if(n){try{n.disconnect();}catch(e){}}}
+function clearVoiceChain(){
+ disconnectNode(gate);
+ for(const n of effectNodes)disconnectNode(n);effectNodes=[];
+ disconnectNode(highpass);disconnectNode(lowpass);disconnectNode(compressor);
+ if(delay)disconnectNode(delay);if(feedback)disconnectNode(feedback);if(delayWet)disconnectNode(delayWet);
+ if(lfo){try{lfo.stop();}catch(e){}}disconnectNode(lfoGain);disconnectNode(tremolo);
+ delay=feedback=delayWet=lfo=lfoGain=tremolo=null;
 }
-function makeDistortion(amount){
- const sh=audioCtx.createWaveShaper();
- const n=44100,curve=new Float32Array(n),k=amount*500+1;
- for(let i=0;i<n;i++){const x=i*2/n-1;curve[i]=(1+k)*x/(1+k*Math.abs(x));}
- sh.curve=curve;sh.oversample='4x';return sh;
-}
+function makeDistortion(amount){const sh=audioCtx.createWaveShaper();const n=44100;const curve=new Float32Array(n);const k=Math.max(1,amount*400+1);for(let i=0;i<n;i++){const x=i*2/n-1;curve[i]=(1+k)*x/(1+k*Math.abs(x));}sh.curve=curve;sh.oversample='4x';return sh;}
 function buildVoiceChain(){
- if(!audioCtx||!source||!dest||!gate)return;
- clearNodes();
- const amount=parseFloat($('effectAmount').value),type=$('voiceEffect').value;
+ if(!audioCtx||!source||!dest||!analyser)return;
+ clearVoiceChain();
+ gate=audioCtx.createGain();gate.gain.value=speaking?1:0;
  voiceBus=audioCtx.createGain();voiceBus.gain.value=parseFloat($('voiceVolume').value);
  highpass=audioCtx.createBiquadFilter();highpass.type='highpass';highpass.frequency.value=70;
  lowpass=audioCtx.createBiquadFilter();lowpass.type='lowpass';lowpass.frequency.value=10000;
- compressor=audioCtx.createDynamicsCompressor();compressor.threshold.value=-22;compressor.knee.value=18;compressor.ratio.value=4;compressor.attack.value=.003;compressor.release.value=.12;
- source.connect(analyser);
- source.connect(gate);
- gate.connect(highpass);highpass.connect(lowpass);
- let chain=lowpass;
+ compressor=audioCtx.createDynamicsCompressor();compressor.threshold.value=-24;compressor.knee.value=18;compressor.ratio.value=3;compressor.attack.value=.003;compressor.release.value=.12;
+ source.disconnect();source.connect(analyser);source.connect(gate);
+ gate.connect(highpass);highpass.connect(lowpass);let chain=lowpass;
+ const amount=parseFloat($('effectAmount').value),type=$('voiceEffect').value;
  if(type==='deep'){
-   const f=audioCtx.createBiquadFilter();f.type='lowshelf';f.frequency.value=320;f.gain.value=18*amount;
-   const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=6500-2500*amount;
-   chain.connect(f);f.connect(lp);chain=lp;effectNodes.push(f,lp);
-   const d=makeDistortion(.12*amount);chain.connect(d);chain=d;effectNodes.push(d);
+   const f=audioCtx.createBiquadFilter();f.type='lowshelf';f.frequency.value=180;f.gain.value=20*amount;chain.connect(f);chain=f;effectNodes.push(f);
+   const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=6500;chain.connect(lp);chain=lp;effectNodes.push(lp);
  }
  if(type==='high'){
-   const f=audioCtx.createBiquadFilter();f.type='highshelf';f.frequency.value=1400;f.gain.value=18*amount;
-   const hp=audioCtx.createBiquadFilter();hp.type='highpass';hp.frequency.value=180+420*amount;
-   chain.connect(f);f.connect(hp);chain=hp;effectNodes.push(f,hp);
-   const presence=audioCtx.createBiquadFilter();presence.type='peaking';presence.frequency.value=2800;presence.Q.value=1.2;presence.gain.value=8*amount;
-   chain.connect(presence);chain=presence;effectNodes.push(presence);
+   const f=audioCtx.createBiquadFilter();f.type='highshelf';f.frequency.value=1400;f.gain.value=16*amount;chain.connect(f);chain=f;effectNodes.push(f);
+   const hp=audioCtx.createBiquadFilter();hp.type='highpass';hp.frequency.value=120+180*amount;chain.connect(hp);chain=hp;effectNodes.push(hp);
  }
  if(type==='radio'||type==='megaphone'){
    const hp=audioCtx.createBiquadFilter();hp.type='highpass';hp.frequency.value=type==='radio'?450:650;
-   const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=type==='radio'?3000:3300;
-   const peak=audioCtx.createBiquadFilter();peak.type='peaking';peak.frequency.value=1500;peak.Q.value=1.1;peak.gain.value=10*amount;
-   chain.connect(hp);hp.connect(lp);lp.connect(peak);chain=peak;effectNodes.push(hp,lp,peak);
-   const d=makeDistortion(.35*amount);chain.connect(d);chain=d;effectNodes.push(d);
+   const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=type==='radio'?3300:3800;
+   chain.connect(hp);hp.connect(lp);chain=lp;effectNodes.push(hp,lp);
  }
  if(type==='distortion'||type==='monster'){
-   const d=makeDistortion(type==='monster'?Math.min(1,amount*1.7):Math.min(1,amount*1.25));
-   chain.connect(d);chain=d;effectNodes.push(d);
-   if(type==='monster'){
-     const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=4200;
-     const low=audioCtx.createBiquadFilter();low.type='lowshelf';low.frequency.value=180;low.gain.value=14*amount;
-     chain.connect(lp);lp.connect(low);chain=low;effectNodes.push(lp,low);
-   }
+   const d=makeDistortion(type==='monster'?Math.min(1,Math.max(.25,amount*1.5)):amount);chain.connect(d);chain=d;effectNodes.push(d);
+   if(type==='monster'){const f=audioCtx.createBiquadFilter();f.type='lowshelf';f.frequency.value=250;f.gain.value=10*amount;chain.connect(f);chain=f;effectNodes.push(f);}
  }
  if(type==='robot'){
-   // Modulación de amplitud fuerte y audible (voz robótica).
-   lfo=audioCtx.createOscillator();lfo.frequency.value=65+35*amount;
-   lfoGain=audioCtx.createGain();lfoGain.gain.value=.48*amount;
-   lfo.connect(lfoGain);lfoGain.connect(voiceBus.gain);lfo.start();
-   effectNodes.push(lfoGain);
-   const bp=audioCtx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=1200;bp.Q.value=1.1+amount*2;
-   chain.connect(bp);chain=bp;effectNodes.push(bp);
+   tremolo=audioCtx.createGain();tremolo.gain.value=1;
+   chain.connect(tremolo);chain=tremolo;
+   lfo=audioCtx.createOscillator();lfo.frequency.value=45+55*amount;
+   lfoGain=audioCtx.createGain();lfoGain.gain.value=.45*amount;
+   lfo.connect(lfoGain);lfoGain.connect(tremolo.gain);lfo.start();effectNodes.push(lfoGain);
+   const bp=audioCtx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=900+500*amount;bp.Q.value=1.2;chain.connect(bp);chain=bp;effectNodes.push(bp);
  }
+ chain.connect(compressor);compressor.connect(voiceBus);
  if(type==='echo'||type==='space'){
-   delay=audioCtx.createDelay(1.0);delay.delayTime.value=type==='echo'?.24:.42;
-   feedback=audioCtx.createGain();feedback.gain.value=(type==='echo'?.30:.36)*amount;
-   delayWet=audioCtx.createGain();delayWet.gain.value=.55*amount;
-   chain.connect(delay);delay.connect(feedback);feedback.connect(delay);delay.connect(delayWet);delayWet.connect(voiceBus);
-   effectNodes.push(delay,feedback,delayWet);
+   delay=audioCtx.createDelay(1);delay.delayTime.value=type==='echo'?.22:.38;
+   feedback=audioCtx.createGain();feedback.gain.value=(type==='echo'?.24:.30)*amount;
+   delayWet=audioCtx.createGain();delayWet.gain.value=.45*amount;
+   compressor.connect(delay);delay.connect(feedback);feedback.connect(delay);delay.connect(delayWet);delayWet.connect(voiceBus);
  }
- chain.connect(compressor);compressor.connect(voiceBus);voiceBus.connect(dest);
+ voiceBus.connect(dest);
 }
 
 $('startBtn').addEventListener('click',async()=>{
  try{
-  $('startBtn').disabled=true;setStatus($('sendStatus'),'solicitando permiso…');
-  micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false,channelCount:1},video:false});
-  audioCtx=new(window.AudioContext||window.webkitAudioContext)();await audioCtx.resume();
-  source=audioCtx.createMediaStreamSource(micStream);analyser=audioCtx.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.08;
-  gate=audioCtx.createGain();gate.gain.value=0;
-  source.connect(analyser);
-  dest=audioCtx.createMediaStreamDestination();processedStream=dest.stream;
-  buildVoiceChain();
-  $('calibrateBtn').disabled=false;setStatus($('sendStatus'),'micrófono activo',true);$('startBtn').textContent='🎙️ Micrófono activo';
-  for(const list of Object.values(peer.connections||{}))for(const c of list)if(c.open)callOverlay(c.peer);
-  const data=new Uint8Array(analyser.fftSize);
-  const tick=()=>{
-   analyser.getByteTimeDomainData(data);let sum=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}const rms=Math.sqrt(sum/data.length);
-   $('meterBar').style.width=Math.min(100,rms*500)+'%';const now=performance.now();
-   const dynamic=Math.max(threshold,noiseFloor*2.2+0.006);
-   if(rms>=dynamic){speaking=true;lastOpen=now;}else if(now-lastOpen>holdMs){speaking=false;}
-   gate.gain.setTargetAtTime(speaking?1:0,audioCtx.currentTime,speaking?.012:.045);
-   $('mouthState').textContent=speaking?'ABIERTA':'CERRADA';$('mouthState').className='big '+(speaking?'ok':'');$('mouthImg').src=speaking?'open.png':'closed.png';broadcastMouth();requestAnimationFrame(tick);
-  };tick();
+   $('startBtn').disabled=true;setStatus($('sendStatus'),'solicitando permiso…');
+   micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false,channelCount:1},video:false});
+   audioCtx=new(window.AudioContext||window.webkitAudioContext)();await audioCtx.resume();
+   source=audioCtx.createMediaStreamSource(micStream);analyser=audioCtx.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.08;
+   dest=audioCtx.createMediaStreamDestination();processedStream=dest.stream;
+   buildVoiceChain();
+   $('calibrateBtn').disabled=false;setStatus($('sendStatus'),'micrófono activo',true);$('startBtn').textContent='🎙️ Micrófono activo';
+   for(const list of Object.values(peer?.connections||{}))for(const c of list)if(c.open)callOverlay(c.peer);
+   const data=new Uint8Array(analyser.fftSize);
+   const tick=()=>{
+     if(!analyser||!audioCtx)return;
+     analyser.getByteTimeDomainData(data);let sum=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}const rms=Math.sqrt(sum/data.length);
+     $('meterBar').style.width=Math.min(100,rms*500)+'%';const now=performance.now();
+     const dynamic=Math.max(threshold,noiseFloor*2.2+0.006);
+     if(rms>=dynamic){speaking=true;lastOpen=now;}else if(now-lastOpen>holdMs){speaking=false;}
+     if(gate)gate.gain.setTargetAtTime(speaking?1:0,audioCtx.currentTime,speaking?.012:.045);
+     $('mouthState').textContent=speaking?'ABIERTA':'CERRADA';$('mouthState').className='big '+(speaking?'ok':'');$('mouthImg').src=speaking?'open.png':'closed.png';broadcastMouth();requestAnimationFrame(tick);
+   };tick();
  }catch(e){console.error(e);$('startBtn').disabled=false;setStatus($('sendStatus'),'permiso/error: '+(e.message||e));}
 });
 
-$('calibrateBtn').addEventListener('click',async()=>{
+$('calibrateBtn').addEventListener('click',()=>{
  if(!analyser||calibrating)return;calibrating=true;$('calibrateBtn').disabled=true;$('noiseInfo').textContent='Calibrando… no hables durante 3 segundos.';
  const data=new Uint8Array(analyser.fftSize),values=[];const start=performance.now();
  const sample=()=>{analyser.getByteTimeDomainData(data);let sum=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}values.push(Math.sqrt(sum/data.length));if(performance.now()-start<3000)requestAnimationFrame(sample);else{values.sort((a,b)=>a-b);noiseFloor=values[Math.floor(values.length*.8)]||.012;threshold=Math.max(.012,noiseFloor*2.4);$('threshold').value=threshold;$('thresholdValue').textContent=threshold.toFixed(3);$('noiseInfo').textContent='Ruido medido: '+noiseFloor.toFixed(4)+' • umbral ajustado: '+threshold.toFixed(3);calibrating=false;$('calibrateBtn').disabled=false;}};sample();
