@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>VTuber Mouth • Perfil reforzado</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b0c11;color:#f5f5f7}body{padding:16px}.wrap{max-width:780px;margin:auto}.card{background:#151720;border:1px solid #292c38;border-radius:16px;padding:16px;margin:12px 0}h1{margin:0 0 4px;font-size:24px}h2{margin:0 0 10px;font-size:18px}p,.muted{color:#aeb1bd;font-size:14px}.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}label{display:block;margin:10px 0 6px;font-size:13px;color:#cdd0d9}input,select,button{font:inherit}input[type=text],input[type=password],select{width:100%;padding:11px;border-radius:10px;border:1px solid #363947;background:#0f1016;color:#fff}input[type=range]{width:100%}button{border:0;border-radius:11px;padding:12px 14px;background:#6e61ff;color:#fff;font-weight:700;cursor:pointer}button.secondary{background:#2b2e3a}button:disabled{opacity:.45}.status{padding:10px 12px;background:#101117;border:1px solid #2c2f3a;border-radius:10px;margin-top:8px}.ok{color:#63e6aa}.bad{color:#ff7189}.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}.small{font-size:12px}.hidden{display:none!important}.meter{height:20px;border:1px solid #30333e;border-radius:10px;overflow:hidden;background:#090a0e}.bar{height:100%;width:0;background:#7569ff;transition:width .05s linear}.big{font-size:28px;font-weight:800}.mouth{height:220px;display:flex;align-items:center;justify-content:center}.mouth img{max-width:95%;max-height:210px;object-fit:contain}hr{border:0;border-top:1px solid #292c38;margin:16px 0}.urlbox{background:#0d0e14;border:1px solid #343744;border-radius:10px;padding:10px;word-break:break-all;font-size:12px}.copybtn{width:100%;margin-top:8px}.pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#272a36;font-size:12px}.diag{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;background:#0b0c11;border:1px solid #292c38;border-radius:10px;padding:10px;color:#aeb1bd;max-height:180px;overflow:auto}.overlay-page,html.overlay-page body{background:transparent!important}.overlay-page body{padding:0!important;overflow:hidden!important}.overlay-root{position:fixed;inset:0;width:100vw;height:100vh;background:transparent;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden}.overlay-root img{max-width:100vw;max-height:100vh;object-fit:contain;background:transparent;border:0}.overlay-debug{position:fixed;left:6px;bottom:6px;font:11px monospace;color:rgba(255,255,255,.75);background:rgba(0,0,0,.4);padding:4px 6px;border-radius:6px;display:none}
+</style>
+</head>
+<body>
+<div id="app" class="wrap">
+<h1>🐿️ VTuber Mouth</h1>
+<p>Perfil único · ID permanente · una sola URL de Web Overlay · reconexión automática.</p>
+<section class="card">
+<h2>👤 Perfil</h2>
+<div id="loginBox">
+<label>Usuario</label><input id="username" type="text" autocomplete="username" placeholder="Tu usuario">
+<label>Contraseña</label><input id="password" type="password" autocomplete="current-password" placeholder="Tu contraseña">
+<button id="loginBtn" style="margin-top:10px">Entrar / crear perfil</button>
+<div id="loginMsg" class="small muted" style="margin-top:8px"></div>
+</div>
+<div id="profileBox" class="hidden">
+<div class="status">Perfil: <b id="profileName"></b></div>
+<div class="status">ID único: <span id="profileId" class="code"></span></div>
+<div class="small muted" style="margin-top:8px">El ID se deriva de usuario + contraseña. No se guarda la contraseña. Usa exactamente las mismas credenciales en ambos teléfonos.</div>
+<div class="small" style="margin-top:12px">ÚNICA URL DEL WEB OVERLAY</div>
+<div id="overlayUrl" class="urlbox" style="margin-top:6px"></div>
+<button id="copyOverlay" class="copybtn">📋 Copiar URL del Web Overlay</button>
+<button id="logout" class="secondary copybtn">Cerrar perfil</button>
+</div>
+</section>
+<section id="honorPanel" class="card hidden">
+<h2>🎙️ HONOR — emisor</h2>
+<div class="status">ID PeerJS: <span id="peerId" class="code">—</span></div>
+<div class="status">Servidor PeerJS: <span id="peerState">esperando perfil</span></div>
+<div class="status">Web Overlay: <span id="overlayState">sin conexión</span></div>
+<div class="status">Audio WebRTC: <span id="audioState">esperando overlay</span></div>
+<button id="startMic" style="margin-top:10px">🎙️ Activar micrófono</button>
+<div class="status">Micrófono: <span id="micState">apagado</span></div>
+<div style="margin-top:10px"><div class="small">Nivel de voz</div><div class="meter"><div id="meter" class="bar"></div></div></div>
+<div style="margin-top:10px">Boca: <span id="mouthText" class="big">CERRADA</span></div>
+<hr>
+<h2>🔇 Detección de voz</h2>
+<label>Sensibilidad</label><input id="threshold" type="range" min="0.005" max="0.12" step="0.001" value="0.025"><div class="small muted">Umbral: <span id="thresholdVal">0.025</span></div>
+<label>Retención de boca</label><input id="hold" type="range" min="40" max="600" step="10" value="120"><div class="small muted"><span id="holdVal">120</span> ms</div>
+<button id="calibrate" class="secondary" disabled style="margin-top:8px">🔇 Calibrar ruido durante 3 s</button>
+<div id="noiseInfo" class="small muted" style="margin-top:6px">Activa el micrófono primero.</div>
+<hr>
+<h2>🎭 Modulador de voz</h2>
+<label>Efecto</label>
+<select id="effect"><option value="normal">Normal</option><option value="deep">Grave suave</option><option value="high">Aguda suave</option><option value="robot">Robot</option><option value="monster">Monstruo</option><option value="radio">Radio</option><option value="megaphone">Megáfono</option><option value="distortion">Distorsión suave</option><option value="echo">Eco</option><option value="space">Espacial</option></select>
+<label>Intensidad</label><input id="amount" type="range" min="0" max="1" step="0.01" value="0.50"><div class="small muted"><span id="amountVal">50</span>%</div>
+<label>Volumen de salida</label><input id="volume" type="range" min="0.2" max="1.1" step="0.01" value="0.82"><div class="small muted"><span id="volumeVal">82</span>%</div>
+</section>
+<section id="previewPanel" class="card hidden"><h2>🖼️ Vista previa</h2><div id="previewStatus" class="status">esperando</div><div class="mouth"><img id="previewImg" src="closed.png" alt="avatar"></div></section>
+<section id="diagnosticPanel" class="card hidden"><h2>🛠️ Diagnóstico</h2><div id="diag" class="diag"></div></section>
+</div>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id);
+const qs=new URLSearchParams(location.search);
+const IS_OVERLAY=qs.get('mode')==='overlay';
+const STUN=[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478?transport=udp'}];
+const PEER_OPTIONS={debug:0,config:{iceServers:STUN}};
+function hex(b){return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+async function makeProfileId(u,p){const d=new TextEncoder().encode('VTUBER-MOUTH-FINAL-2026|'+u.trim().toLowerCase()+'|'+p);const h=await crypto.subtle.digest('SHA-256',d);return 'vm-'+hex(h).slice(0,32)}
+function base(){return location.origin+location.pathname}
+function makeOverlayUrl(id){return base()+'?mode=overlay&profile='+encodeURIComponent(id)+'&open=open.png&closed=closed.png'}
+
+/* ---------------- OVERLAY ---------------- */
+if(IS_OVERLAY){
+ document.documentElement.classList.add('overlay-page');document.body.style.cssText='margin:0;padding:0;background:transparent;overflow:hidden';$('app')?.remove();
+ const root=document.createElement('div');root.className='overlay-root';document.body.appendChild(root);const img=document.createElement('img');img.src=qs.get('closed')||'closed.png';root.appendChild(img);
+ const debug=document.createElement('div');debug.className='overlay-debug';document.body.appendChild(debug);
+ const profileId=(qs.get('profile')||'').trim();let peer=null,conn=null,call=null,audio=null,retryTimer=0,peerTimer=0,heart=0,lastPong=0,dead=false,connectDelay=500,peerDelay=1000;
+ const log=x=>debug.textContent=x;const mouth=o=>img.src=o?(qs.get('open')||'open.png'):(qs.get('closed')||'closed.png');
+ function closeConn(){if(conn){try{conn.removeAllListeners();conn.close()}catch(e){}conn=null}if(call){try{call.close()}catch(e){}call=null}}
+ function ensureAudio(){if(!audio){audio=document.createElement('audio');audio.autoplay=true;audio.playsInline=true;audio.setAttribute('playsinline','');audio.style.display='none';document.body.appendChild(audio)}return audio}
+ function play(){try{const p=audio?.play();p?.catch(()=>{})}catch(e){}}
+ function scheduleConnect(){if(dead||retryTimer)return;retryTimer=setTimeout(()=>{retryTimer=0;connect()},connectDelay);connectDelay=Math.min(connectDelay*1.5,5000)}
+ function schedulePeer(){if(dead||peerTimer)return;peerTimer=setTimeout(()=>{peerTimer=0;newPeer()},peerDelay);peerDelay=Math.min(peerDelay*1.5,7000)}
+ function connect(){if(dead||!peer||peer.destroyed||!profileId)return;closeConn();try{conn=peer.connect(profileId,{reliable:true,serialization:'json'});conn.on('open',()=>{connectDelay=500;lastPong=Date.now();log('conectado');try{conn.send({type:'hello',v:4})}catch(e){}});conn.on('data',d=>{if(!d)return;if(d.type==='mouth')mouth(d.mouth==='open');else if(d.type==='pong')lastPong=Date.now();else if(d.type==='need-audio')requestAudio()});conn.on('close',()=>{closeConn();scheduleConnect()});conn.on('error',()=>scheduleConnect())}catch(e){scheduleConnect()}}
+ function requestAudio(){if(conn?.open)try{conn.send({type:'need-audio'})}catch(e){}}
+ function newPeer(){if(dead||!profileId)return;try{peer=new Peer(undefined,PEER_OPTIONS);peer.on('open',()=>{peerDelay=1000;connect()});peer.on('call',c=>{if(call)try{call.close()}catch(e){}call=c;try{c.answer();c.on('stream',s=>{const a=ensureAudio();a.srcObject=s;a.muted=false;a.volume=1;play();setTimeout(play,200);setTimeout(play,900);log('audio conectado')});c.on('close',()=>{if(call===c){call=null;requestAudio()}});c.on('error',()=>{if(call===c){call=null;requestAudio()}})}catch(e){requestAudio()}});peer.on('disconnected',()=>{try{peer.reconnect()}catch(e){schedulePeer()}});peer.on('close',()=>{peer=null;schedulePeer()});peer.on('error',e=>{if(e?.type==='network')schedulePeer();else scheduleConnect()})}catch(e){schedulePeer()}}
+ if(!profileId){mouth(false);log('falta profile');return}
+ heart=setInterval(()=>{if(dead)return;if(!conn?.open){scheduleConnect();return}if(Date.now()-lastPong>9000){try{conn.close()}catch(e){}scheduleConnect();return}try{conn.send({type:'ping'})}catch(e){scheduleConnect()}},2500);
+ newPeer();window.addEventListener('beforeunload',()=>{dead=true;clearInterval(heart);clearTimeout(retryTimer);clearTimeout(peerTimer);closeConn();try{peer?.destroy()}catch(e){}});return;
+}
+
+/* ---------------- HONOR APP ---------------- */
+const STORE='vtuber-mouth-final-profile-v1';let profile=null;try{profile=JSON.parse(localStorage.getItem(STORE)||'null')}catch(e){}
+let peer=null,mic=null,ctx=null,source=null,analyser=null,dest=null,processed=null,gate=null,master=null,comp=null;let nodes=[],oscs=[];let audioCall=null,audioTarget=null;let speaking=false,lastSpeak=0,lastMouth='',lastSend=0,threshold=.025,hold=120,noise=.01,running=false,peerWatch=0;
+function peerState(t,g=false){$('peerState').textContent=t;$('peerState').className=g?'ok':''}
+function overlayState(t,g=false){$('overlayState').textContent=t;$('overlayState').className=g?'ok':''}
+function audioState(t,g=false){$('audioState').textContent=t;$('audioState').className=g?'ok':''}
+function render(){if(profile){$('loginBox').classList.add('hidden');$('profileBox').classList.remove('hidden');$('honorPanel').classList.remove('hidden');$('previewPanel').classList.remove('hidden');$('diagnosticPanel').classList.remove('hidden');$('profileName').textContent=profile.user;$('profileId').textContent=profile.id;$('overlayUrl').textContent=makeOverlayUrl(profile.id);startPeer()}else{$('loginBox').classList.remove('hidden');$('profileBox').classList.add('hidden');$('honorPanel').classList.add('hidden');$('previewPanel').classList.add('hidden');$('diagnosticPanel').classList.add('hidden')}}
+function diag(x){const d=$('diag');if(d){const line=new Date().toLocaleTimeString()+'  '+x;d.textContent=(line+'\n'+d.textContent).slice(0,5000)}}
+render();
+$('loginBtn').onclick=async()=>{const u=$('username').value.trim(),p=$('password').value;if(u.length<2||p.length<4){$('loginMsg').textContent='Usuario mínimo 2 caracteres y contraseña mínimo 4.';return}try{const id=await makeProfileId(u,p);profile={user:u,id};localStorage.setItem(STORE,JSON.stringify(profile));$('password').value='';$('loginMsg').textContent='';render()}catch(e){$('loginMsg').textContent='No se pudo crear el perfil: '+e.message}};
+$('logout').onclick=()=>{try{peer?.destroy()}catch(e){}peer=null;profile=null;try{localStorage.removeItem(STORE)}catch(e){}render()};
+$('copyOverlay').onclick=async()=>{if(!profile)return;const u=makeOverlayUrl(profile.id);let ok=false;try{await navigator.clipboard.writeText(u);ok=true}catch(e){try{const t=document.createElement('textarea');t.value=u;t.style.cssText='position:fixed;left:-9999px;top:-9999px';document.body.appendChild(t);t.focus();t.select();ok=document.execCommand('copy');t.remove()}catch(e2){}}if(ok){$('copyOverlay').textContent='✓ URL copiada';setTimeout(()=>{$('copyOverlay').textContent='📋 Copiar URL del Web Overlay'},1800)}else window.prompt('Copia esta URL:',u)};
+function startPeer(){if(!profile||peer&&!peer.destroyed)return;peerState('conectando…');overlayState('buscando conexión…');try{peer=new Peer(profile.id,PEER_OPTIONS);peer.on('open',id=>{$('peerId').textContent=id;peerState('servidor conectado',true);overlayState('buscando conexión…');diag('PeerJS abierto: '+id)});peer.on('connection',c=>{diag('Conexión entrante: '+c.peer);c.on('open',()=>{audioTarget=c.peer;overlayState('overlay conectado',true);try{c.send({type:'hello-ack',v:4})}catch(e){}broadcast(true);if(processed)callOverlay(c.peer)});c.on('data',d=>{if(!d)return;if(d.type==='hello'||d.type==='hello-ack'){audioTarget=c.peer;overlayState('overlay conectado',true);broadcast(true);if(processed)callOverlay(c.peer)}else if(d.type==='ping'){try{c.send({type:'pong'})}catch(e){}}else if(d.type==='need-audio'){callOverlay(c.peer)}});c.on('close',()=>{if(audioTarget===c.peer){audioTarget=null;overlayState('overlay desconectado — reconectando…');audioState('esperando nueva conexión');closeAudioCall()}});c.on('error',()=>{if(audioTarget===c.peer){audioTarget=null;overlayState('reintentando…')}})});peer.on('disconnected',()=>{peerState('reconectando servidor…');try{peer.reconnect()}catch(e){}});peer.on('close',()=>{peerState('cerrado');overlayState('sin conexión')});peer.on('error',e=>{const t=e?.type||e?.message||'error';peerState(t==='unavailable-id'?'ID ocupado: cierra otra sesión HONOR':'error: '+t);diag('PeerJS error: '+t)});peerWatch=setInterval(()=>{if(peer&&!peer.destroyed&&peer.disconnected){try{peer.reconnect()}catch(e){} }},5000)}catch(e){peerState('error: '+e.message);diag('Error creando Peer: '+e.message)}}
+function closeAudioCall(){if(audioCall){try{audioCall.close()}catch(e){}audioCall=null}}
+function callOverlay(id){if(!processed||!peer||peer.destroyed||!id)return;if(audioCall&&audioCall.peer===id&&(audioCall.open||audioCall.connection))return;closeAudioCall();try{audioState('conectando audio…');audioCall=peer.call(id,processed,{metadata:{kind:'vtuber-audio',v:4}});audioTarget=id;audioCall.on('stream',()=>audioState('audio conectado',true));audioCall.on('close',()=>{audioCall=null;audioState('audio perdido — reconectando…');if(audioTarget===id)setTimeout(()=>callOverlay(id),700)});audioCall.on('error',()=>{audioCall=null;audioState('reintentando audio…');if(audioTarget===id)setTimeout(()=>callOverlay(id),1000)})}catch(e){audioCall=null;audioState('reintentando audio…');setTimeout(()=>callOverlay(id),1000)}}
+function broadcast(force=false){if(!peer||peer.destroyed)return;const m=speaking?'open':'closed',now=performance.now();if(!force&&m===lastMouth&&now-lastSend<100)return;lastMouth=m;lastSend=now;for(const arr of Object.values(peer.connections||{}))for(const c of arr)if(c.open)try{c.send({type:'mouth',mouth:m})}catch(e){}}
+function disconnect(n){try{n?.disconnect()}catch(e){}}
+function clearFx(){for(const n of nodes)disconnect(n);nodes=[];for(const o of oscs)try{o.stop()}catch(e){}oscs=[];disconnect(gate);disconnect(comp);disconnect(master);gate=comp=master=null}
+function drive(a){const sh=ctx.createWaveShaper(),c=new Float32Array(2048),k=1+a*9;for(let i=0;i<c.length;i++){const x=i*2/c.length-1;c[i]=Math.tanh(k*x)/Math.tanh(k)}sh.curve=c;sh.oversample='2x';return sh}
+function filt(type,f,q,g){const n=ctx.createBiquadFilter();n.type=type;n.frequency.value=f;n.Q.value=q||0;n.gain.value=g||0;return n}
+function buildFx(){if(!ctx||!source||!dest||!analyser)return;clearFx();gate=ctx.createGain();gate.gain.value=speaking?1:0;comp=ctx.createDynamicsCompressor();comp.threshold.value=-19;comp.knee.value=18;comp.ratio.value=2.7;comp.attack.value=.004;comp.release.value=.13;master=ctx.createGain();master.gain.value=+$('volume').value;source.disconnect();source.connect(analyser);source.connect(gate);let ch=gate;const a=+$('amount').value,t=$('effect').value;const hp=filt('highpass',70,.7),lp=filt('lowpass',11200,.7);ch.connect(hp);hp.connect(lp);ch=lp;nodes.push(hp,lp);
+ if(t==='deep'){let n=filt('lowshelf',160,0,7*a);ch.connect(n);ch=n;nodes.push(n);n=filt('highshelf',4800,0,-2.5*a);ch.connect(n);ch=n;nodes.push(n)}
+ if(t==='high'){let n=filt('lowshelf',180,0,-2*a);ch.connect(n);ch=n;nodes.push(n);n=filt('highshelf',2600,0,6*a);ch.connect(n);ch=n;nodes.push(n)}
+ if(t==='radio'||t==='megaphone'){let n=filt('highpass',t==='radio'?330:520,.8),n2=filt('lowpass',t==='radio'?3900:4300,.8);ch.connect(n);n.connect(n2);ch=n2;nodes.push(n,n2);n=drive(.07*a);ch.connect(n);ch=n;nodes.push(n)}
+ if(t==='distortion'||t==='monster'){let n=drive((t==='monster'?.18:.10)*a);ch.connect(n);ch=n;nodes.push(n);if(t==='monster'){n=filt('lowshelf',210,0,4*a);ch.connect(n);ch=n;nodes.push(n)}}
+ if(t==='robot'){const dry=ctx.createGain(),wet=ctx.createGain(),ring=ctx.createGain(),sum=ctx.createGain();dry.gain.value=1-.4*a;wet.gain.value=.4*a;ring.gain.value=0;ch.connect(dry);ch.connect(ring);ring.connect(wet);dry.connect(sum);wet.connect(sum);const o=ctx.createOscillator(),og=ctx.createGain();o.frequency.value=45+25*a;og.gain.value=1;o.connect(og);og.connect(ring.gain);o.start();oscs.push(o);ch=sum;nodes.push(dry,wet,ring,sum,og)}
+ if(t==='echo'||t==='space'){const dry=ctx.createGain(),wet=ctx.createGain(),d=ctx.createDelay(1),fb=ctx.createGain(),sum=ctx.createGain();dry.gain.value=1;wet.gain.value=.18+.10*a;d.delayTime.value=t==='echo'?.19:.32;fb.gain.value=t==='echo'?.13:.17*a;ch.connect(dry);ch.connect(d);d.connect(fb);fb.connect(d);d.connect(wet);dry.connect(sum);wet.connect(sum);ch=sum;nodes.push(dry,wet,d,fb,sum)}
+ ch.connect(comp);comp.connect(master);master.connect(dest)}
+$('threshold').oninput=e=>{threshold=+e.target.value;$('thresholdVal').textContent=threshold.toFixed(3)};$('hold').oninput=e=>{hold=+e.target.value;$('holdVal').textContent=hold};$('amount').oninput=e=>{$('amountVal').textContent=Math.round(e.target.value*100);if(ctx)buildFx()};$('volume').oninput=e=>{$('volumeVal').textContent=Math.round(e.target.value*100);if(master)master.gain.value=+e.target.value};$('effect').onchange=()=>{if(ctx)buildFx()};
+ $('startMic').onclick=async()=>{try{$('startMic').disabled=true;$('micState').textContent='solicitando permiso…';mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false,channelCount:1},video:false});ctx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});await ctx.resume();source=ctx.createMediaStreamSource(mic);analyser=ctx.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=.04;dest=ctx.createMediaStreamDestination();processed=dest.stream;buildFx();$('micState').textContent='activo';$('micState').className='ok';$('calibrate').disabled=false;running=true;meterLoop();for(const arr of Object.values(peer?.connections||{}))for(const c of arr)if(c.open)callOverlay(c.peer)}catch(e){$('startMic').disabled=false;$('micState').textContent='error: '+e.message}};
+ function meterLoop(){if(!running||!analyser)return;const d=new Uint8Array(analyser.fftSize);analyser.getByteTimeDomainData(d);let s=0;for(const b of d){const v=(b-128)/128;s+=v*v}const rms=Math.sqrt(s/d.length);$('meter').style.width=Math.min(100,rms*650)+'%';const now=performance.now(),th=Math.max(threshold,noise*2+.004);if(rms>th){speaking=true;lastSpeak=now}else if(now-lastSpeak>hold)speaking=false;if(gate)gate.gain.setTargetAtTime(speaking?1:0,ctx.currentTime,speaking?.008:.035);$('mouthText').textContent=speaking?'ABIERTA':'CERRADA';$('mouthText').className='big '+(speaking?'ok':'');$('previewImg').src=speaking?'open.png':'closed.png';broadcast();requestAnimationFrame(meterLoop)}
+ $('calibrate').onclick=()=>{if(!analyser)return;$('calibrate').disabled=true;$('noiseInfo').textContent='Calibrando: no hables…';const d=new Uint8Array(analyser.fftSize),v=[],st=performance.now();const f=()=>{analyser.getByteTimeDomainData(d);let s=0;for(const b of d){const x=(b-128)/128;s+=x*x}v.push(Math.sqrt(s/d.length));if(performance.now()-st<3000)requestAnimationFrame(f);else{v.sort((a,b)=>a-b);noise=v[Math.floor(v.length*.8)]||.01;threshold=Math.max(.01,noise*2.2);$('threshold').value=threshold;$('thresholdVal').textContent=threshold.toFixed(3);$('noiseInfo').textContent='Ruido medido '+noise.toFixed(4)+' · umbral '+threshold.toFixed(3);$('calibrate').disabled=false}};f()};
+})();
+</script>
+</body>
+</html>
