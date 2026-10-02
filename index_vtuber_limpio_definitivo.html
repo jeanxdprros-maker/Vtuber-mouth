@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>HONOR → PRISM • VTuber Mouth</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:#0b0b10;color:#f4f4f7;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{padding:16px}.wrap{max-width:760px;margin:auto}h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:0 0 10px}p,.muted{color:#a9abb7;font-size:14px}.card{background:#151620;border:1px solid #292b38;border-radius:16px;padding:16px;margin:12px 0}button,input,select{font:inherit}button{border:0;border-radius:12px;padding:12px 14px;background:#6d5dfc;color:#fff;font-weight:700}button.secondary{background:#292b38}button:disabled{opacity:.45}input[type=text],input[type=number],select{width:100%;background:#0f1017;color:#fff;border:1px solid #343746;border-radius:10px;padding:11px}input[type=range]{width:100%}label{display:block;margin:10px 0 6px;font-size:13px;color:#c9cad3}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.status{padding:10px 12px;border-radius:10px;background:#101117;border:1px solid #2b2d38}.ok{color:#61e6a8}.bad{color:#ff7c93}.meter{height:20px;background:#090a0f;border-radius:10px;overflow:hidden;border:1px solid #30323e}.bar{height:100%;width:0%;transition:width .05s linear;background:#7c6cff}.mouth{min-height:210px;display:flex;align-items:center;justify-content:center;background:transparent;position:relative}.mouth img{max-width:95%;max-height:210px;object-fit:contain}.hidden{display:none!important}.big{font-size:30px;font-weight:800}.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}.small{font-size:12px}hr{border:0;border-top:1px solid #292b38;margin:14px 0}
+html.overlay-mode,html.overlay-mode body{background:transparent!important;background-color:transparent!important}html.overlay-mode body{padding:0!important;overflow:hidden!important}#overlayRoot{position:fixed;inset:0;width:100vw;height:100vh;display:flex;align-items:flex-end;justify-content:center;pointer-events:none;background:transparent!important;overflow:hidden}#overlayRoot img{display:block;max-width:100vw;max-height:100vh;width:auto;height:auto;object-fit:contain;background:transparent!important;border:0!important;box-shadow:none!important}
+</style>
+</head>
+<body>
+<div id="app" class="wrap">
+<h1>HONOR → PRISM</h1>
+<p>Micrófono del HONOR → limpieza de ruido → modificador de voz → PRISM. El micrófono del POCO puede permanecer silenciado.</p>
+<div id="sender" class="card">
+<h2>1. HONOR — emisor</h2>
+<p>Este teléfono usa siempre el mismo ID fijo de PeerJS. No tienes que copiar un ID aleatorio.</p>
+<div class="status">ID fijo: <span id="peerId" class="code">704004476</span></div>
+<button id="startBtn" style="margin-top:10px">🎙️ Activar micrófono</button>
+<div class="status" style="margin-top:10px">Estado: <span id="sendStatus">esperando</span></div>
+<div style="margin-top:10px"><div class="small">Nivel de micrófono</div><div class="meter"><div id="meterBar" class="bar"></div></div></div>
+<div style="margin-top:10px"><div class="small">Boca</div><div id="mouthState" class="big">CERRADA</div></div>
+<hr>
+<h2>Reducción de ruido</h2>
+<label for="threshold">Sensibilidad de voz (más alto = bloquea más ruido)</label>
+<input id="threshold" type="range" min="0.005" max="0.15" step="0.001" value="0.035"><div class="small muted">Actual: <span id="thresholdValue">0.035</span></div>
+<label for="hold">Retención de boca al dejar de hablar (ms)</label>
+<input id="hold" type="number" min="0" max="1000" step="10" value="120">
+<label for="calibration">Calibración automática del ruido</label>
+<div class="row"><button id="calibrateBtn" class="secondary" disabled>🔇 Calibrar 3 s</button><button id="resetThreshold" class="secondary">Restablecer</button></div>
+<div class="small muted" id="noiseInfo">Primero activa el micrófono. Durante la calibración no hables.</div>
+<hr>
+<h2>🎭 Modificador de voz</h2>
+<label for="voiceEffect">Efecto</label>
+<select id="voiceEffect"><option value="normal">Normal</option><option value="deep">Grave</option><option value="high">Aguda</option><option value="robot">Robot</option><option value="monster">Monstruo</option><option value="radio">Radio</option><option value="megaphone">Megáfono</option><option value="distortion">Distorsionada</option><option value="echo">Eco</option><option value="space">Espacial</option></select>
+<label for="effectAmount">Intensidad</label><input id="effectAmount" type="range" min="0" max="1" step="0.01" value="0.65"><div class="small muted">Intensidad: <span id="effectAmountValue">65%</span></div>
+<label for="voiceVolume">Volumen de voz</label><input id="voiceVolume" type="range" min="0.2" max="1.4" step="0.01" value="1"><div class="small muted">Volumen: <span id="voiceVolumeValue">100%</span></div>
+<div class="small muted">Los modos grave/aguda son efectos de Web Audio; no son un pitch-shifter profesional.</div>
+<hr>
+<div class="small">URL del overlay para PRISM:</div><div class="small muted">El overlay usa automáticamente el ID fijo <b>704004476</b>.</div><button id="copyOverlay" style="margin-top:10px">📋 Copiar URL del overlay</button>
+</div>
+<div class="card"><h2>Prueba local</h2><p>Sirve para comprobar la boca y el audio antes de pegar la URL en PRISM.</p><div class="status">Estado: <span id="localStatus">esperando</span></div><div id="mouthPreview" class="mouth"><img id="mouthImg" alt="VTuber" src="closed.png"></div><audio id="remoteAudio" autoplay playsinline></audio></div>
+</div>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(()=>{
+'use strict';
+const FIXED_ID='704004476'; // único ID de señalización del HONOR
+const $=id=>document.getElementById(id);
+const params=new URLSearchParams(location.search);
+const isOverlay=params.get('mode')==='overlay';
+const app=$('app');
+function setStatus(el,text,good=false){if(!el)return;el.textContent=text;el.className=good?'ok':'';}
+
+/* ================= PRISM OVERLAY ================= */
+if(isOverlay){
+ document.documentElement.classList.add('overlay-mode');
+ document.body.style.background='transparent';
+ document.body.style.padding='0';
+ app.classList.add('hidden');
+ const root=document.createElement('div');root.id='overlayRoot';document.body.appendChild(root);
+ const img=document.createElement('img');root.appendChild(img);
+ const openUrl=params.get('open')||'open.png';
+ const closedUrl=params.get('closed')||'closed.png';
+ img.src=closedUrl;
+
+ let peer=null,conn=null,audioEl=null;
+ let reconnectTimer=null,heartbeatTimer=null,heartbeatTimeout=null,peerRetryTimer=null;
+ let destroyed=false,connecting=false,lastPong=0,lastAudioCall=null;
+ let reconnectDelay=800;
+
+ function setMouth(open){img.src=open?openUrl:closedUrl;}
+ function ensureAudioElement(){
+   if(!audioEl){
+     audioEl=document.createElement('audio');
+     audioEl.autoplay=true; audioEl.playsInline=true; audioEl.setAttribute('playsinline','');
+     audioEl.style.display='none'; document.body.appendChild(audioEl);
+   }
+   return audioEl;
+ }
+ function playRemote(){
+   if(!audioEl)return;
+   const p=audioEl.play();
+   if(p&&p.catch)p.catch(()=>{});
+ }
+ function clearHeartbeat(){
+   if(heartbeatTimer){clearInterval(heartbeatTimer);heartbeatTimer=null;}
+   if(heartbeatTimeout){clearTimeout(heartbeatTimeout);heartbeatTimeout=null;}
+ }
+ function closeAudioCall(){
+   if(lastAudioCall){try{lastAudioCall.close();}catch(e){} lastAudioCall=null;}
+   if(audioEl){try{audioEl.pause();}catch(e){} audioEl.srcObject=null;}
+ }
+ function markConnectionDead(){
+   clearHeartbeat();
+   if(conn){try{conn.close();}catch(e){} conn=null;}
+   closeAudioCall();
+   scheduleConnection();
+ }
+ function startHeartbeat(){
+   clearHeartbeat();
+   lastPong=Date.now();
+   heartbeatTimer=setInterval(()=>{
+     if(destroyed||!conn||!conn.open)return;
+     try{conn.send({type:'ping',t:Date.now()});}catch(e){markConnectionDead();return;}
+     if(heartbeatTimeout)clearTimeout(heartbeatTimeout);
+     heartbeatTimeout=setTimeout(()=>{
+       if(Date.now()-lastPong>6500)markConnectionDead();
+     },3500);
+   },2000);
+ }
+ function connectToHonor(){
+   if(destroyed||!peer||peer.destroyed||connecting)return;
+   connecting=true;
+   try{
+     if(conn){try{conn.close();}catch(e){} conn=null;}
+     const c=peer.connect(FIXED_ID,{reliable:false,serialization:'json'});
+     conn=c;
+     c.on('open',()=>{
+       connecting=false; reconnectDelay=800; lastPong=Date.now();
+       try{c.send({type:'hello'});}catch(e){markConnectionDead();return;}
+       startHeartbeat();
+     });
+     c.on('data',data=>{
+       if(!data)return;
+       if(data.type==='mouth')setMouth(data.mouth==='open');
+       else if(data.type==='pong'){lastPong=Date.now();}
+     });
+     c.on('close',()=>{if(conn===c){conn=null;connecting=false;closeAudioCall();scheduleConnection();}});
+     c.on('error',()=>{if(conn===c){conn=null;connecting=false;closeAudioCall();scheduleConnection();}});
+   }catch(e){connecting=false;scheduleConnection();}
+ }
+ function scheduleConnection(){
+   if(destroyed||reconnectTimer)return;
+   reconnectTimer=setTimeout(()=>{reconnectTimer=null;connectToHonor();reconnectDelay=Math.min(reconnectDelay*1.6,5000);},reconnectDelay);
+ }
+ function schedulePeerRecreate(delay=1200){
+   if(destroyed||peerRetryTimer)return;
+   peerRetryTimer=setTimeout(()=>{peerRetryTimer=null;createPeer();},delay);
+ }
+ function createPeer(){
+   if(destroyed)return;
+   clearHeartbeat();
+   try{if(peer&&!peer.destroyed)peer.destroy();}catch(e){}
+   peer=null; conn=null; connecting=false; closeAudioCall();
+   try{
+     const p=new Peer(undefined,{debug:0});
+     peer=p;
+     p.on('open',()=>{reconnectDelay=800;connectToHonor();});
+     p.on('call',call=>{
+       if(lastAudioCall&&lastAudioCall!==call){try{lastAudioCall.close();}catch(e){}}
+       lastAudioCall=call;
+       try{call.answer();}catch(e){try{call.close();}catch(_){} return;}
+       call.on('stream',stream=>{
+         if(lastAudioCall!==call)return;
+         const el=ensureAudioElement();
+         el.srcObject=stream;el.volume=1;
+         playRemote();
+         setTimeout(playRemote,150);
+       });
+       call.on('close',()=>{if(lastAudioCall===call){lastAudioCall=null;if(conn&&conn.open)try{conn.send({type:'need-audio'});}catch(e){}}});
+       call.on('error',()=>{if(lastAudioCall===call){lastAudioCall=null;if(conn&&conn.open)try{conn.send({type:'need-audio'});}catch(e){}}});
+     });
+     p.on('disconnected',()=>{try{p.reconnect();}catch(e){schedulePeerRecreate();}});
+     p.on('close',()=>{if(peer===p){peer=null;closeAudioCall();schedulePeerRecreate();}});
+     p.on('error',e=>{
+       const type=e?.type||'';
+       if(type==='peer-unavailable')scheduleConnection();
+       else if(type==='network')schedulePeerRecreate(1800);
+       else if(type==='socket-error'||type==='socket-closed')schedulePeerRecreate(1800);
+     });
+   }catch(e){schedulePeerRecreate(1500);}
+ }
+ createPeer();
+ window.addEventListener('beforeunload',()=>{
+   destroyed=true;clearHeartbeat();
+   if(reconnectTimer)clearTimeout(reconnectTimer);
+   if(peerRetryTimer)clearTimeout(peerRetryTimer);
+   try{conn?.close();peer?.destroy();}catch(e){}
+   closeAudioCall();
+ });
+ return;
+}
+
+/* ================= HONOR EMITTER ================= */
+let peer=null,micStream=null,audioCtx=null,source=null,analyser=null,dest=null,processedStream=null;
+let gate=null,voiceBus=null,compressor=null,highpass=null,lowpass=null;
+let effectNodes=[],delay=null,feedback=null,delayWet=null,lfo=null,lfoGain=null,tremolo=null;
+let speaking=false,lastOpen=0,lastSent=null,lastSendTime=0,threshold=parseFloat($('threshold').value),holdMs=parseInt($('hold').value,10);
+let noiseFloor=0.012,calibrating=false;
+const activeCalls=new Map();
+let honorPeerRetry=null,honorPeerStarting=false;
+
+$('threshold').addEventListener('input',e=>{threshold=parseFloat(e.target.value);$('thresholdValue').textContent=threshold.toFixed(3);});
+$('hold').addEventListener('input',e=>{holdMs=Math.max(0,parseInt(e.target.value||'0',10));});
+$('effectAmount').addEventListener('input',e=>{$('effectAmountValue').textContent=Math.round(e.target.value*100)+'%';if(audioCtx)buildVoiceChain();});
+$('voiceVolume').addEventListener('input',e=>{$('voiceVolumeValue').textContent=Math.round(e.target.value*100)+'%';if(voiceBus)voiceBus.gain.value=parseFloat(e.target.value);});
+$('voiceEffect').addEventListener('change',()=>{if(audioCtx)buildVoiceChain();});
+$('resetThreshold').addEventListener('click',()=>{threshold=0.035;$('threshold').value='0.035';$('thresholdValue').textContent='0.035';noiseFloor=0.012;$('noiseInfo').textContent='Umbral restablecido.';});
+
+function broadcastMouth(force=false){
+ const state=speaking?'open':'closed',now=performance.now();
+ if(!force&&state===lastSent&&now-lastSendTime<80)return;
+ lastSent=state;lastSendTime=now;
+ if(!peer||peer.destroyed)return;
+ for(const list of Object.values(peer.connections||{}))for(const c of list){
+   if(c.open){try{c.send({type:'mouth',mouth:state});}catch(e){}}
+ }
+}
+function stopCallFor(id){const c=activeCalls.get(id);if(c){try{c.close();}catch(e){}activeCalls.delete(id);}}
+function callOverlay(remotePeerId){
+ if(!processedStream||!peer||peer.destroyed||!remotePeerId)return;
+ const old=activeCalls.get(remotePeerId);
+ if(old&&old.open!==false)return;
+ stopCallFor(remotePeerId);
+ try{
+   const call=peer.call(remotePeerId,processedStream);
+   activeCalls.set(remotePeerId,call);
+   call.on('close',()=>{if(activeCalls.get(remotePeerId)===call)activeCalls.delete(remotePeerId);});
+   call.on('error',()=>{if(activeCalls.get(remotePeerId)===call)activeCalls.delete(remotePeerId);});
+ }catch(e){}
+}
+function scheduleHonorPeer(){
+ if(honorPeerRetry)return;
+ honorPeerRetry=setTimeout(()=>{honorPeerRetry=null;startHonorPeer();},1500);
+}
+function startHonorPeer(){
+ if(honorPeerStarting)return;
+ honorPeerStarting=true;
+ try{if(peer&&!peer.destroyed)peer.destroy();}catch(e){}
+ peer=null;
+ try{
+   const p=new Peer(FIXED_ID,{debug:0});
+   peer=p;
+   p.on('open',id=>{honorPeerStarting=false;$('peerId').textContent=id;setStatus($('sendStatus'),'ID fijo conectado / listo',true);});
+   p.on('connection',c=>{
+     c.on('open',()=>{broadcastMouth(true);if(processedStream)callOverlay(c.peer);});
+     c.on('data',data=>{
+       if(data?.type==='hello'){broadcastMouth(true);if(processedStream)callOverlay(c.peer);}
+       else if(data?.type==='ping'){try{c.send({type:'pong',t:data.t});}catch(e){}}
+       else if(data?.type==='need-audio'){if(processedStream)callOverlay(c.peer);}
+     });
+     c.on('close',()=>stopCallFor(c.peer));
+     c.on('error',()=>stopCallFor(c.peer));
+   });
+   p.on('disconnected',()=>{setStatus($('sendStatus'),'reconectando PeerJS…');try{p.reconnect();}catch(e){honorPeerStarting=false;scheduleHonorPeer();}});
+   p.on('close',()=>{if(peer===p){peer=null;honorPeerStarting=false;setStatus($('sendStatus'),'reconectando PeerJS…');scheduleHonorPeer();}});
+   p.on('error',e=>{
+     const type=e?.type||'';
+     if(type==='unavailable-id'){honorPeerStarting=false;setStatus($('sendStatus'),'ID fijo ocupado; reintentando…');scheduleHonorPeer();}
+     else if(type==='network'||type==='socket-error'||type==='socket-closed'){honorPeerStarting=false;setStatus($('sendStatus'),'red temporal; reconectando…');scheduleHonorPeer();}
+   });
+ }catch(e){honorPeerStarting=false;scheduleHonorPeer();}
+}
+startHonorPeer();
+
+function disconnectNode(n){if(n){try{n.disconnect();}catch(e){}}}
+function clearVoiceChain(){
+ disconnectNode(gate);disconnectNode(voiceBus);
+ for(const n of effectNodes)disconnectNode(n);effectNodes=[];
+ disconnectNode(highpass);disconnectNode(lowpass);disconnectNode(compressor);
+ if(delay)disconnectNode(delay);if(feedback)disconnectNode(feedback);if(delayWet)disconnectNode(delayWet);
+ if(lfo){try{lfo.stop();}catch(e){}}disconnectNode(lfoGain);disconnectNode(tremolo);
+ delay=feedback=delayWet=lfo=lfoGain=tremolo=null;
+}
+function makeDistortion(amount){const sh=audioCtx.createWaveShaper();const n=44100;const curve=new Float32Array(n);const k=Math.max(1,amount*400+1);for(let i=0;i<n;i++){const x=i*2/n-1;curve[i]=(1+k)*x/(1+k*Math.abs(x));}sh.curve=curve;sh.oversample='4x';return sh;}
+function buildVoiceChain(){
+ if(!audioCtx||!source||!dest||!analyser)return;
+ clearVoiceChain();
+ gate=audioCtx.createGain();gate.gain.value=speaking?1:0;
+ voiceBus=audioCtx.createGain();voiceBus.gain.value=parseFloat($('voiceVolume').value);
+ highpass=audioCtx.createBiquadFilter();highpass.type='highpass';highpass.frequency.value=70;
+ lowpass=audioCtx.createBiquadFilter();lowpass.type='lowpass';lowpass.frequency.value=10000;
+ compressor=audioCtx.createDynamicsCompressor();compressor.threshold.value=-24;compressor.knee.value=18;compressor.ratio.value=3;compressor.attack.value=.003;compressor.release.value=.12;
+ source.disconnect();source.connect(analyser);source.connect(gate);
+ gate.connect(highpass);highpass.connect(lowpass);let chain=lowpass;
+ const amount=parseFloat($('effectAmount').value),type=$('voiceEffect').value;
+ if(type==='deep'){const f=audioCtx.createBiquadFilter();f.type='lowshelf';f.frequency.value=180;f.gain.value=20*amount;chain.connect(f);chain=f;effectNodes.push(f);const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=6500;chain.connect(lp);chain=lp;effectNodes.push(lp);}
+ if(type==='high'){const f=audioCtx.createBiquadFilter();f.type='highshelf';f.frequency.value=1400;f.gain.value=16*amount;chain.connect(f);chain=f;effectNodes.push(f);const hp=audioCtx.createBiquadFilter();hp.type='highpass';hp.frequency.value=120+180*amount;chain.connect(hp);chain=hp;effectNodes.push(hp);}
+ if(type==='radio'||type==='megaphone'){const hp=audioCtx.createBiquadFilter();hp.type='highpass';hp.frequency.value=type==='radio'?450:650;const lp=audioCtx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=type==='radio'?3300:3800;chain.connect(hp);hp.connect(lp);chain=lp;effectNodes.push(hp,lp);}
+ if(type==='distortion'||type==='monster'){const d=makeDistortion(type==='monster'?Math.min(1,Math.max(.25,amount*1.5)):amount);chain.connect(d);chain=d;effectNodes.push(d);if(type==='monster'){const f=audioCtx.createBiquadFilter();f.type='lowshelf';f.frequency.value=250;f.gain.value=10*amount;chain.connect(f);chain=f;effectNodes.push(f);}}
+ if(type==='robot'){tremolo=audioCtx.createGain();tremolo.gain.value=1;chain.connect(tremolo);chain=tremolo;lfo=audioCtx.createOscillator();lfo.frequency.value=45+55*amount;lfoGain=audioCtx.createGain();lfoGain.gain.value=.45*amount;lfo.connect(lfoGain);lfoGain.connect(tremolo.gain);lfo.start();effectNodes.push(lfoGain);const bp=audioCtx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=900+500*amount;bp.Q.value=1.2;chain.connect(bp);chain=bp;effectNodes.push(bp);}
+ chain.connect(compressor);compressor.connect(voiceBus);
+ if(type==='echo'||type==='space'){delay=audioCtx.createDelay(1);delay.delayTime.value=type==='echo'?.22:.38;feedback=audioCtx.createGain();feedback.gain.value=(type==='echo'?.24:.30)*amount;delayWet=audioCtx.createGain();delayWet.gain.value=.45*amount;compressor.connect(delay);delay.connect(feedback);feedback.connect(delay);delay.connect(delayWet);delayWet.connect(voiceBus);}
+ voiceBus.connect(dest);
+}
+
+$('startBtn').addEventListener('click',async()=>{
+ try{
+   $('startBtn').disabled=true;setStatus($('sendStatus'),'solicitando permiso…');
+   micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false,channelCount:1},video:false});
+   audioCtx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});await audioCtx.resume();
+   source=audioCtx.createMediaStreamSource(micStream);analyser=audioCtx.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=.05;
+   dest=audioCtx.createMediaStreamDestination();processedStream=dest.stream;
+   buildVoiceChain();
+   $('calibrateBtn').disabled=false;setStatus($('sendStatus'),'micrófono activo',true);$('startBtn').textContent='🎙️ Micrófono activo';
+   for(const list of Object.values(peer?.connections||{}))for(const c of list)if(c.open)callOverlay(c.peer);
+   const data=new Uint8Array(analyser.fftSize);
+   const tick=()=>{
+     if(!analyser||!audioCtx)return;
+     analyser.getByteTimeDomainData(data);let sum=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}const rms=Math.sqrt(sum/data.length);
+     $('meterBar').style.width=Math.min(100,rms*500)+'%';const now=performance.now();
+     const dynamic=Math.max(threshold,noiseFloor*2.2+0.006);
+     if(rms>=dynamic){speaking=true;lastOpen=now;}else if(now-lastOpen>holdMs){speaking=false;}
+     if(gate)gate.gain.setTargetAtTime(speaking?1:0,audioCtx.currentTime,speaking?.012:.045);
+     $('mouthState').textContent=speaking?'ABIERTA':'CERRADA';$('mouthState').className='big '+(speaking?'ok':'');$('mouthImg').src=speaking?'open.png':'closed.png';broadcastMouth();requestAnimationFrame(tick);
+   };tick();
+ }catch(e){console.error(e);$('startBtn').disabled=false;setStatus($('sendStatus'),'permiso/error: '+(e.message||e));}
+});
+
+$('calibrateBtn').addEventListener('click',()=>{
+ if(!analyser||calibrating)return;calibrating=true;$('calibrateBtn').disabled=true;$('noiseInfo').textContent='Calibrando… no hables durante 3 segundos.';
+ const data=new Uint8Array(analyser.fftSize),values=[];const start=performance.now();
+ const sample=()=>{analyser.getByteTimeDomainData(data);let sum=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}values.push(Math.sqrt(sum/data.length));if(performance.now()-start<3000)requestAnimationFrame(sample);else{values.sort((a,b)=>a-b);noiseFloor=values[Math.floor(values.length*.8)]||.012;threshold=Math.max(.012,noiseFloor*2.4);$('threshold').value=threshold;$('thresholdValue').textContent=threshold.toFixed(3);$('noiseInfo').textContent='Ruido medido: '+noiseFloor.toFixed(4)+' • umbral ajustado: '+threshold.toFixed(3);calibrating=false;$('calibrateBtn').disabled=false;}};sample();
+});
+
+function overlayUrl(){const base=location.origin+location.pathname;return base+'?mode=overlay&open='+encodeURIComponent('open.png')+'&closed='+encodeURIComponent('closed.png');}
+
+window.addEventListener('beforeunload',()=>{
+  for(const id of activeCalls.keys())stopCallFor(id);
+  try{micStream?.getTracks().forEach(t=>t.stop());}catch(e){}
+  try{audioCtx?.close();}catch(e){}
+  try{peer?.destroy();}catch(e){}
+});
+$('copyOverlay').addEventListener('click',async()=>{const url=overlayUrl();try{await navigator.clipboard.writeText(url);$('copyOverlay').textContent='✓ URL copiada';setTimeout(()=>$('copyOverlay').textContent='📋 Copiar URL del overlay',1600);}catch(e){prompt('Copia esta URL:',url);}});
+})();
+</script>
+</body>
+</html>
