@@ -66,51 +66,109 @@ if(isOverlay){
  const openUrl=params.get('open')||'open.png';
  const closedUrl=params.get('closed')||'closed.png';
  img.src=closedUrl;
- let peer=null,conn=null,audioEl=null,retryTimer=null,retryDelay=700;
- let destroyed=false,lastAudioCall=null;
+ let peer=null,conn=null,audioEl=null,retryTimer=null,audioRetryTimer=null,peerRetryTimer=null;
+ let retryDelay=700,destroyed=false,currentCall=null;
  function setMouth(open){img.src=open?openUrl:closedUrl;}
  function ensureAudioElement(){
-   if(!audioEl){audioEl=document.createElement('audio');audioEl.autoplay=true;audioEl.playsInline=true;audioEl.setAttribute('playsinline','');audioEl.style.display='none';document.body.appendChild(audioEl);}
+   if(!audioEl){
+     audioEl=document.createElement('audio');
+     audioEl.autoplay=true;audioEl.playsInline=true;audioEl.setAttribute('playsinline','');
+     audioEl.preload='none';audioEl.style.display='none';
+     document.body.appendChild(audioEl);
+   }
    return audioEl;
  }
+ function cleanupAudio(){
+   if(!audioEl)return;
+   try{audioEl.pause();}catch(e){}
+   try{audioEl.srcObject=null;}catch(e){}
+ }
  function playRemote(){if(!audioEl)return;const p=audioEl.play();if(p&&p.catch)p.catch(()=>{});}
+ function requestAudio(){
+   if(destroyed||!conn||!conn.open||currentCall)return;
+   try{conn.send({type:'audio'});}catch(e){}
+ }
+ function scheduleAudioRetry(){
+   if(destroyed||audioRetryTimer)return;
+   audioRetryTimer=setTimeout(()=>{audioRetryTimer=null;requestAudio();},1200);
+ }
  function connectToHonor(){
    if(destroyed||!peer||peer.destroyed)return;
-   try{if(conn){try{conn.close();}catch(e){}} conn=peer.connect(FIXED_ID,{reliable:true});
-     conn.on('open',()=>{retryDelay=700;try{conn.send({type:'hello'});}catch(e){};});
+   if(conn&&conn.open)return;
+   try{
+     if(conn){try{conn.close();}catch(e){}conn=null;}
+     conn=peer.connect(FIXED_ID,{reliable:true,serialization:'json'});
+     conn.on('open',()=>{
+       retryDelay=700;
+       try{conn.send({type:'hello'});}catch(e){}
+       requestAudio();
+     });
      conn.on('data',data=>{
        if(data?.type==='mouth')setMouth(data.mouth==='open');
        else if(data==='OPEN'||data===1)setMouth(true);
        else if(data==='CLOSED'||data===0)setMouth(false);
      });
-     conn.on('close',()=>scheduleReconnect());
-     conn.on('error',()=>scheduleReconnect());
+     conn.on('close',()=>{conn=null;currentCall=null;cleanupAudio();scheduleReconnect();});
+     conn.on('error',()=>{scheduleReconnect();});
    }catch(e){scheduleReconnect();}
  }
  function scheduleReconnect(){
    if(destroyed||retryTimer)return;
-   retryTimer=setTimeout(()=>{retryTimer=null;connectToHonor();retryDelay=Math.min(retryDelay*1.7,5000);},retryDelay);
+   retryTimer=setTimeout(()=>{retryTimer=null;connectToHonor();retryDelay=Math.min(retryDelay*1.6,5000);},retryDelay);
  }
  function createPeer(){
-   if(destroyed)return;
-   try{peer=new Peer(undefined,{debug:0});
-     peer.on('open',()=>{retryDelay=700;connectToHonor();});
-     peer.on('call',call=>{
-       try{call.answer();lastAudioCall=call;
-         call.on('stream',stream=>{const el=ensureAudioElement();el.srcObject=stream;el.volume=1;playRemote();setTimeout(playRemote,300);setTimeout(playRemote,1200);});
-         call.on('close',()=>{if(lastAudioCall===call)lastAudioCall=null;});
-         call.on('error',()=>{});
-       }catch(e){}
+   if(destroyed||peer)return;
+   try{
+     const p=new Peer(undefined,{debug:0});
+     peer=p;
+     p.on('open',()=>{retryDelay=700;connectToHonor();});
+     p.on('call',call=>{
+       // Solo una llamada de audio. Las duplicadas se cierran inmediatamente.
+       if(currentCall){try{call.close();}catch(e){}return;}
+       currentCall=call;
+       try{call.answer();}catch(e){currentCall=null;try{call.close();}catch(x){}return;}
+       call.on('stream',stream=>{
+         const el=ensureAudioElement();
+         try{el.pause();}catch(e){}
+         try{el.srcObject=null;}catch(e){}
+         el.srcObject=stream;el.volume=1;
+         playRemote();
+       });
+       call.on('close',()=>{
+         if(currentCall===call)currentCall=null;
+         cleanupAudio();
+         scheduleAudioRetry();
+       });
+       call.on('error',()=>{
+         if(currentCall===call)currentCall=null;
+         cleanupAudio();
+         scheduleAudioRetry();
+       });
      });
-     peer.on('disconnected',()=>{try{peer.reconnect();}catch(e){}});
-     peer.on('close',()=>{peer=null;scheduleReconnectPeer();});
-     peer.on('error',e=>{if(e?.type==='peer-unavailable')scheduleReconnect();else if(e?.type==='network')scheduleReconnectPeer();});
-   }catch(e){scheduleReconnectPeer();}
+     p.on('disconnected',()=>{try{p.reconnect();}catch(e){schedulePeerRecreate();}});
+     p.on('close',()=>{
+       if(peer===p)peer=null;
+       currentCall=null;cleanupAudio();
+       schedulePeerRecreate();
+     });
+     p.on('error',e=>{
+       if(e?.type==='peer-unavailable')scheduleReconnect();
+       else if(e?.type==='network')schedulePeerRecreate();
+     });
+   }catch(e){peer=null;schedulePeerRecreate();}
  }
- let peerRetry=null;
- function scheduleReconnectPeer(){if(destroyed||peerRetry)return;peerRetry=setTimeout(()=>{peerRetry=null;createPeer();},1500);}
+ function schedulePeerRecreate(){
+   if(destroyed||peerRetryTimer)return;
+   peerRetryTimer=setTimeout(()=>{peerRetryTimer=null;if(peer)try{peer.destroy();}catch(e){}peer=null;createPeer();},2000);
+ }
  createPeer();
- window.addEventListener('beforeunload',()=>{destroyed=true;if(retryTimer)clearTimeout(retryTimer);if(peerRetry)clearTimeout(peerRetry);try{conn?.close();peer?.destroy();}catch(e){}});
+ window.addEventListener('beforeunload',()=>{
+   destroyed=true;
+   if(retryTimer)clearTimeout(retryTimer);
+   if(audioRetryTimer)clearTimeout(audioRetryTimer);
+   if(peerRetryTimer)clearTimeout(peerRetryTimer);
+   try{conn?.close();currentCall?.close();peer?.destroy();}catch(e){}
+ });
  return;
 }
 
@@ -139,7 +197,8 @@ function broadcastMouth(force=false){
 function stopCallFor(id){const c=activeCalls.get(id);if(c){try{c.close();}catch(e){}activeCalls.delete(id);}}
 function callOverlay(remotePeerId){
  if(!processedStream||!peer||peer.destroyed||!remotePeerId)return;
- stopCallFor(remotePeerId);
+ const existing=activeCalls.get(remotePeerId);
+ if(existing && !existing._closed)return;
  try{
    const call=peer.call(remotePeerId,processedStream);
    activeCalls.set(remotePeerId,call);
@@ -148,21 +207,41 @@ function callOverlay(remotePeerId){
  }catch(e){}
 }
 
+let peerRetryTimer=null;
+function scheduleHonorPeerRecreate(){
+ if(peerRetryTimer)return;
+ peerRetryTimer=setTimeout(()=>{peerRetryTimer=null;startHonorPeer();},2500);
+}
 function startHonorPeer(){
- peer=new Peer(FIXED_ID,{debug:0});
- peer.on('open',id=>{$('peerId').textContent=id;setStatus($('sendStatus'),'ID fijo conectado / listo',true);});
- peer.on('connection',conn=>{
+ if(peer&& !peer.destroyed)return;
+ const p=new Peer(FIXED_ID,{debug:0});
+ peer=p;
+ p.on('open',id=>{$('peerId').textContent=id;setStatus($('sendStatus'),'ID fijo conectado / listo',true);});
+ p.on('connection',conn=>{
    conn.on('open',()=>{broadcastMouth(true);if(processedStream)callOverlay(conn.peer);});
-   conn.on('data',data=>{if(data?.type==='hello'){broadcastMouth(true);if(processedStream)callOverlay(conn.peer);}});
+   conn.on('data',data=>{
+     if(data?.type==='hello'||data?.type==='audio'){
+       broadcastMouth(true);
+       if(processedStream)callOverlay(conn.peer);
+     }
+   });
    conn.on('close',()=>stopCallFor(conn.peer));
    conn.on('error',()=>stopCallFor(conn.peer));
  });
- peer.on('disconnected',()=>{setStatus($('sendStatus'),'reconectando PeerJS…');try{peer.reconnect();}catch(e){}});
- peer.on('close',()=>{setStatus($('sendStatus'),'PeerJS cerrado. Recarga la página del HONOR.');});
- peer.on('error',e=>{
+ p.on('disconnected',()=>{setStatus($('sendStatus'),'reconectando PeerJS…');try{p.reconnect();}catch(e){scheduleHonorPeerRecreate();}});
+ p.on('close',()=>{
+   if(peer===p)peer=null;
+   setStatus($('sendStatus'),'Reconectando automáticamente…');
+   scheduleHonorPeerRecreate();
+ });
+ p.on('error',e=>{
    const type=e?.type||'';
-   if(type==='unavailable-id')setStatus($('sendStatus'),'ID 704004476 ocupado. Cierra cualquier otra pestaña HONOR.');
-   else if(type==='network')setStatus($('sendStatus'),'Red PeerJS temporalmente desconectada…');
+   if(type==='unavailable-id'){
+     if(peer===p)peer=null;
+     setStatus($('sendStatus'),'ID ocupado; reintentando automáticamente…');
+     try{p.destroy();}catch(x){}
+     scheduleHonorPeerRecreate();
+   }else if(type==='network')setStatus($('sendStatus'),'Red PeerJS temporalmente desconectada…');
    else setStatus($('sendStatus'),'error: '+(type||e.message||e));
  });
 }
@@ -244,18 +323,4 @@ $('startBtn').addEventListener('click',async()=>{
      if(gate)gate.gain.setTargetAtTime(speaking?1:0,audioCtx.currentTime,speaking?.012:.045);
      $('mouthState').textContent=speaking?'ABIERTA':'CERRADA';$('mouthState').className='big '+(speaking?'ok':'');$('mouthImg').src=speaking?'open.png':'closed.png';broadcastMouth();requestAnimationFrame(tick);
    };tick();
- }catch(e){console.error(e);$('startBtn').disabled=false;setStatus($('sendStatus'),'permiso/error: '+(e.message||e));}
-});
-
-$('calibrateBtn').addEventListener('click',()=>{
- if(!analyser||calibrating)return;calibrating=true;$('calibrateBtn').disabled=true;$('noiseInfo').textContent='Calibrando… no hables durante 3 segundos.';
- const data=new Uint8Array(analyser.fftSize),values=[];const start=performance.now();
- const sample=()=>{analyser.getByteTimeDomainData(data);let sum=0;for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}values.push(Math.sqrt(sum/data.length));if(performance.now()-start<3000)requestAnimationFrame(sample);else{values.sort((a,b)=>a-b);noiseFloor=values[Math.floor(values.length*.8)]||.012;threshold=Math.max(.012,noiseFloor*2.4);$('threshold').value=threshold;$('thresholdValue').textContent=threshold.toFixed(3);$('noiseInfo').textContent='Ruido medido: '+noiseFloor.toFixed(4)+' • umbral ajustado: '+threshold.toFixed(3);calibrating=false;$('calibrateBtn').disabled=false;}};sample();
-});
-
-function overlayUrl(){const base=location.origin+location.pathname;return base+'?mode=overlay&sender='+encodeURIComponent(FIXED_ID)+'&open='+encodeURIComponent('open.png')+'&closed='+encodeURIComponent('closed.png');}
-$('copyOverlay').addEventListener('click',async()=>{const url=overlayUrl();try{await navigator.clipboard.writeText(url);$('copyOverlay').textContent='✓ URL copiada';setTimeout(()=>$('copyOverlay').textContent='📋 Copiar URL del overlay',1600);}catch(e){prompt('Copia esta URL:',url);}});
-})();
-</script>
-</body>
-</html>
+ }catch(e){console.error(e);$('startBtn').disabled=false;setStatus($('sendStatus'),'permiso/error: '+
